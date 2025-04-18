@@ -1,0 +1,230 @@
+{
+  "address": "2yErQiMAVSgabTtYt9FJQY6sUyBX7P1R1N7i1m2ytRY3",
+  "metadata": {
+    "name": "rsa_storage",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "get_rsa_key",
+      "discriminator": [
+        221,
+        230,
+        182,
+        1,
+        86,
+        8,
+        103,
+        73
+      ],
+      "accounts": [
+        {
+          "name": "user_rsa",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  114,
+                  115,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "signer": true
+        }
+      ],
+      "args": [],
+      "returns": "string"
+    },
+    {
+      "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [],
+      "args": []
+    },
+    {
+      "name": "store_file_metadata",
+      "discriminator": [
+        42,
+        89,
+        82,
+        220,
+        176,
+        68,
+        230,
+        192
+      ],
+      "accounts": [
+        {
+          "name": "file_metadata",
+          "writable": true
+        },
+        {
+          "name": "uploader",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "cid",
+          "type": "string"
+        },
+        {
+          "name": "is_public",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "store_rsa_key",
+      "discriminator": [
+        15,
+        51,
+        221,
+        127,
+        192,
+        173,
+        50,
+        58
+      ],
+      "accounts": [
+        {
+          "name": "user_rsa",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  114,
+                  115,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "rsa_key",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "FileMetadata",
+      "discriminator": [
+        218,
+        65,
+        2,
+        189,
+        72,
+        195,
+        93,
+        55
+      ]
+    },
+    {
+      "name": "UserRSAKey",
+      "discriminator": [
+        179,
+        10,
+        210,
+        163,
+        86,
+        145,
+        200,
+        59
+      ]
+    }
+  ],
+  "types": [
+    {
+      "name": "FileMetadata",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "cid",
+            "type": "string"
+          },
+          {
+            "name": "uploader",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "is_public",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserRSAKey",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "rsa_key",
+            "type": "string"
+          }
+        ]
+      }
+    }
+  ]
+}

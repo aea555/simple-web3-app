@@ -1,0 +1,23 @@
+[package]
+name = "rsa_storage"
+version = "0.1.0"
+description = "Created with Anchor"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "rsa_storage"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build"]
+
+[patch.crates-io]
+bytemuck_derive = "1.9.0"
+
+[dependencies]
+anchor-lang = { version = "0.31.0", features = ["init-if-needed"]}

@@ -36,4 +36,4 @@ yarn-error.log*
 next-env.d.ts
 tmp
 
-./test-ledger
+/test-ledger

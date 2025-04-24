@@ -106,6 +106,10 @@ export type RsaStorage = {
           "type": "string"
         },
         {
+          "name": "keyCid",
+          "type": "string"
+        },
+        {
           "name": "isPublic",
           "type": "bool"
         }
@@ -203,6 +207,10 @@ export type RsaStorage = {
         "fields": [
           {
             "name": "cid",
+            "type": "string"
+          },
+          {
+            "name": "keyCid",
             "type": "string"
           },
           {

@@ -100,6 +100,10 @@
           "type": "string"
         },
         {
+          "name": "key_cid",
+          "type": "string"
+        },
+        {
           "name": "is_public",
           "type": "bool"
         }
@@ -197,6 +201,10 @@
         "fields": [
           {
             "name": "cid",
+            "type": "string"
+          },
+          {
+            "name": "key_cid",
             "type": "string"
           },
           {

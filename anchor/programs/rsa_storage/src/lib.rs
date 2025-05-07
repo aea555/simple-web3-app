@@ -43,7 +43,7 @@ pub struct Initialize {}
 #[instruction()]
 pub struct StoreKey<'info> {
     #[account(
-        init,
+        init_if_needed,
         seeds = [b"user_rsa", user.key().as_ref()],
         bump,
         payer = user,

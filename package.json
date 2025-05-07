@@ -27,6 +27,7 @@
     "aes-gcm": "^0.0.1",
     "daisyui": "^4.12.24",
     "helia": "^5.3.0",
+    "idb-keyval": "^6.2.1",
     "jotai": "^2.12.1",
     "js-sha3": "^0.9.3",
     "multiformats": "^13.3.2",

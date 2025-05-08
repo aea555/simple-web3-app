@@ -2,17 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useWallet, useAnchorWallet } from "@solana/wallet-adapter-react";
-import {
-  fetchFile,
-  uploadEncryptedAESKeyToIPFS,
-  uploadFile,
-} from "@/utils/ipfs";
+import { uploadEncryptedAESKeyToIPFS, uploadFile } from "@/utils/ipfs";
 import {
   encryptAESKeyWithRSA,
   fetchRSAKey,
   generateRSAKeyPair,
 } from "@/utils/cryptography";
-import type { CID } from "multiformats/cid";
+import { CID } from "multiformats/cid";
 import { getProgram, getProgramId } from "@project/anchor";
 import { AnchorProvider } from "@coral-xyz/anchor";
 import { Connection, PublicKey, SystemProgram } from "@solana/web3.js";
@@ -30,7 +26,6 @@ export default function Upload() {
   const anchorWallet = useAnchorWallet();
   const [file, setFile] = useState<File | null>(null);
   const [cid, setCid] = useState<CID | null>(null);
-  const [retrievedData, setRetrievedData] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasPrivateKey, setHasPrivateKey] = useState<boolean>(false);
@@ -106,7 +101,12 @@ export default function Upload() {
 
     try {
       // 1. Fetch user's RSA public key from Solana
-      const { raw: rsaPem } = await fetchRSAKey(publicKey, programId, program);
+      const rsaKey = await fetchRSAKey(publicKey, programId, program);
+      if (!rsaKey) {
+        setError("❌ RSA key not found. Please register your RSA key first.");
+        return;
+      }
+      const { raw: rsaPem } = rsaKey;
 
       // 2. Generate AES key
       const aesKey = await crypto.subtle.generateKey(
@@ -117,7 +117,7 @@ export default function Upload() {
 
       // 3. Upload file encrypted with AES key to IPFS
       const { cid, encryptedKey: rawAESKey } = await uploadFile(file, aesKey);
-      setCid(cid);
+      setCid(CID.parse(cid.toString()));
 
       // 4. Encrypt the AES key with RSA
       const encryptedAESKey = await encryptAESKeyWithRSA(rsaPem, rawAESKey);
@@ -159,12 +159,6 @@ export default function Upload() {
       setError("❌ Upload failed: " + (err.message || err.toString()));
       setStatus(null);
     }
-  }
-
-  async function handleFetch() {
-    if (!cid) return;
-    const data = await fetchFile(cid);
-    setRetrievedData(data);
   }
 
   return (

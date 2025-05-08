@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/rsa_storage.json`.
  */
 export type RsaStorage = {
-  "address": "2yErQiMAVSgabTtYt9FJQY6sUyBX7P1R1N7i1m2ytRY3",
+  "address": "DD52LxDUUHKYtVLnT7N1bgEtwoiwq7jACvhKXzG4JfN3",
   "metadata": {
     "name": "rsaStorage",
     "version": "0.1.0",

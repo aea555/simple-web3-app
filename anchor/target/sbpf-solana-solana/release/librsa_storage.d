@@ -1,0 +1,1 @@
+/home/eskhas/Documents/Ders\ Notları/endgame/Senior\ Project/codes/simple-web3-app/anchor/target/sbpf-solana-solana/release/librsa_storage.rlib: /home/eskhas/Documents/Ders\ Notları/endgame/Senior\ Project/codes/simple-web3-app/anchor/programs/rsa_storage/src/lib.rs

@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::keccak;
 
-declare_id!("2yErQiMAVSgabTtYt9FJQY6sUyBX7P1R1N7i1m2ytRY3");
+declare_id!("DD52LxDUUHKYtVLnT7N1bgEtwoiwq7jACvhKXzG4JfN3");
 
 #[program]
 pub mod rsa_storage {

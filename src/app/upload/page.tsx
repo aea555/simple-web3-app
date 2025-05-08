@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useWallet, useAnchorWallet } from "@solana/wallet-adapter-react";
 import {
-  fetchFile,
+  fetchFile, // Keep this for text files
+  fetchRawFile, // Import this for binary files
   uploadEncryptedAESKeyToIPFS,
   uploadFile,
 } from "@/utils/ipfs";
@@ -30,7 +31,7 @@ export default function Upload() {
   const anchorWallet = useAnchorWallet();
   const [file, setFile] = useState<File | null>(null);
   const [cid, setCid] = useState<CID | null>(null);
-  const [retrievedData, setRetrievedData] = useState<string | null>(null);
+  const [fileUrl, setFileUrl] = useState<string | null>(null); // URL for displaying the file
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasPrivateKey, setHasPrivateKey] = useState<boolean>(false);
@@ -138,7 +139,7 @@ export default function Upload() {
         programId
       );
 
-      await program.methods
+      const tx = await program.methods
         .storeFileMetadata(cid.toString(), keyCid, true)
         .accounts({
           fileMetadata: fileMetadataPDA,
@@ -153,7 +154,7 @@ export default function Upload() {
         ])
         .rpc();
 
-      setStatus("✅ Upload complete!");
+      setStatus(`✅ Upload complete! Transaction ID: ${tx}`);
     } catch (err: any) {
       console.error(err);
       setError("❌ Upload failed: " + (err.message || err.toString()));
@@ -161,18 +162,25 @@ export default function Upload() {
     }
   }
 
-  async function handleFetch() {
-    if (!cid) return;
-    const data = await fetchFile(cid);
-    setRetrievedData(data);
+ async function handleFetch() {
+    if (!cid || !file) return; // Ensure 'file' is available
+
+    try {
+      const rawData = await fetchRawFile(cid);
+      const blob = new Blob([rawData], { type: file.type }); // Use the file's type
+      const url = URL.createObjectURL(blob);
+      setFileUrl(url); // Store the Blob URL for display
+    } catch (error) {
+      console.error("Error fetching file:", error);
+      setError("Failed to fetch file.");
+    }
   }
 
   return (
     <div className="p-4 space-y-4 max-w-md mx-auto">
       {publicKey ? (
         <p className="text-sm text-gray-600">
-          Connected Wallet:{" "}
-          {publicKey.toBase58().substring(0, 10).trimEnd() + "..."}
+          Connected Wallet: {publicKey.toBase58().substring(0, 10).trimEnd() + "..."}
         </p>
       ) : (
         <p className="text-sm text-red-600">Connect Wallet</p>
@@ -262,9 +270,25 @@ export default function Upload() {
 
       {status && <p className="text-blue-500">{status}</p>}
       {cid && (
-        <p className="text-green-600 break-all">📁 CID: {cid.toString()}</p>
+        <div className="mt-4">
+          <p className="text-green-600 break-all">📁 CID: {cid.toString()}</p>
+          <button
+            onClick={handleFetch}
+            className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded mt-2"
+          >
+            Display File
+          </button>
+        </div>
       )}
       {error && <p className="text-red-500">{error}</p>}
+
+      {/* Display the file if a URL is available */}
+      {fileUrl && (
+        <div className="mt-4">
+          {/* You might need to adjust this based on the actual file type. */}
+          <img src={fileUrl} alt="Uploaded File" className="max-w-full" />
+        </div>
+      )}
     </div>
   );
 }

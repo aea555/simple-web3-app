@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useWallet, useAnchorWallet } from "@solana/wallet-adapter-react";
 import {
-  fetchFile, // Keep this for text files
-  fetchRawFile, // Import this for binary files
+  fetchFile,
+  fetchRawFile,
   uploadEncryptedAESKeyToIPFS,
   uploadFile,
 } from "@/utils/ipfs";
@@ -12,6 +12,7 @@ import {
   encryptAESKeyWithRSA,
   fetchRSAKey,
   generateRSAKeyPair,
+  decryptAESKey,
 } from "@/utils/cryptography";
 import type { CID } from "multiformats/cid";
 import { getProgram, getProgramId } from "@project/anchor";
@@ -31,10 +32,12 @@ export default function Upload() {
   const anchorWallet = useAnchorWallet();
   const [file, setFile] = useState<File | null>(null);
   const [cid, setCid] = useState<CID | null>(null);
-  const [fileUrl, setFileUrl] = useState<string | null>(null); // URL for displaying the file
+  const [keyCid, setKeyCid] = useState<string | null>(null); // Store keyCid
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasPrivateKey, setHasPrivateKey] = useState<boolean>(false);
+  const [fileType, setFileType] = useState<string | null>(null);
 
   useEffect(() => {
     getPrivateKey().then((key) => setHasPrivateKey(!!key));
@@ -60,7 +63,6 @@ export default function Upload() {
       const program = getProgram(provider);
 
       // Generate RSA key pair (2048-bit) in browser
-      // This key will be used to encrypt/decrypt AES keys for files
       const { publicKeyPem, privateKey } = await generateRSAKeyPair();
 
       // Store the private key securely in indexed-db
@@ -82,7 +84,6 @@ export default function Upload() {
         ])
         .rpc();
 
-      // Confirm registration
       console.log("RSA key stored! Tx:", tx);
       setStatus("✅ RSA key registered!");
     } catch (err: any) {
@@ -99,6 +100,9 @@ export default function Upload() {
 
     setStatus("📤 Uploading file to IPFS...");
     setError(null);
+    
+    // Store the file type for later use when displaying
+    setFileType(file.type);
 
     const connection = new Connection("https://api.devnet.solana.com");
     const provider = new AnchorProvider(connection, anchorWallet, {});
@@ -126,8 +130,9 @@ export default function Upload() {
         String.fromCharCode(...new Uint8Array(encryptedAESKey))
       );
 
-      // Store encryptedAESKeyBase64 oon IPFS
+      // Store encryptedAESKeyBase64 on IPFS
       const keyCid = await uploadEncryptedAESKeyToIPFS(encryptedAESKeyBase64);
+      setKeyCid(keyCid);
       setStatus(`🔐 Encrypted AES key uploaded. keyCID: ${keyCid}`);
 
       setStatus("📦 Storing file metadata on-chain...");
@@ -162,19 +167,63 @@ export default function Upload() {
     }
   }
 
- async function handleFetch() {
-    if (!cid || !file) return; // Ensure 'file' is available
+  async function handleFetch() {
+    if (!cid || !keyCid) {
+      setError("Missing CID or key CID to fetch the file");
+      return;
+    }
 
     try {
-      const rawData = await fetchRawFile(cid);
-      const blob = new Blob([rawData], { type: file.type }); // Use the file's type
+      setStatus("🔍 Fetching encrypted file from IPFS...");
+      
+      // 1. Fetch the encrypted file
+      const encryptedData = await fetchRawFile(cid);
+      
+      // 2. Fetch the encrypted AES key
+      const encryptedKeyJson = await fetchFile(keyCid as any);
+      const { encrypted_aes_key } = JSON.parse(encryptedKeyJson);
+      
+      // 3. Get the private key from storage
+      const privateKey = await getPrivateKey();
+      if (!privateKey) {
+        setError("❌ No private key found. Cannot decrypt the file.");
+        return;
+      }
+      
+      // 4. Decrypt the AES key
+      const encryptedKeyBytes = Uint8Array.from(atob(encrypted_aes_key), c => c.charCodeAt(0));
+      const encryptedKeyBase64 = btoa(String.fromCharCode(...new Uint8Array(encryptedKeyBytes.buffer)));
+      const aesKey = await decryptAESKey(encryptedKeyBase64, privateKey);
+      
+      // 5. Extract IV and encrypted data from the file
+      const iv = new Uint8Array(encryptedData.slice(0, 12));
+      const encryptedContent = new Uint8Array(encryptedData.slice(12));
+      
+      // 6. Decrypt the file content
+      const decryptedData = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv },
+        aesKey,
+        encryptedContent
+      );
+      
+      // 7. Create a Blob with the correct MIME type
+      const blob = new Blob([decryptedData], { type: fileType || 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
-      setFileUrl(url); // Store the Blob URL for display
-    } catch (error) {
-      console.error("Error fetching file:", error);
-      setError("Failed to fetch file.");
+      
+      setFileUrl(url);
+      setStatus("✅ File decrypted and ready to view!");
+    } catch (error: any) {
+      console.error("Error fetching and decrypting file:", error);
+      setError("❌ Failed to fetch or decrypt file: " + (error.message || error.toString()));
     }
   }
+
+  // Clean up URLs when component unmounts to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (fileUrl) URL.revokeObjectURL(fileUrl);
+    };
+  }, [fileUrl]);
 
   return (
     <div className="p-4 space-y-4 max-w-md mx-auto">
@@ -212,7 +261,7 @@ export default function Upload() {
 
                   const text = await file.text();
 
-                  // ✅ Validate PEM format
+                  // Validate PEM format
                   if (!isValidPrivateKeyPem(text)) {
                     setError(
                       "❌ Invalid PEM format. Please upload a valid RSA private key."
@@ -256,38 +305,76 @@ export default function Upload() {
 
       <input
         type="file"
-        onChange={(e) => setFile(e.target.files?.[0] || null)}
+        onChange={(e) => {
+          const selectedFile = e.target.files?.[0] || null;
+          setFile(selectedFile);
+          if (selectedFile) {
+            setFileType(selectedFile.type);
+          }
+        }}
         className="border p-2 w-full"
       />
 
       <button
         onClick={handleUpload}
-        disabled={!file}
+        disabled={!file || !hasPrivateKey}
         className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded disabled:opacity-50"
       >
         Upload
       </button>
 
       {status && <p className="text-blue-500">{status}</p>}
+      {error && <p className="text-red-500">{error}</p>}
+      
       {cid && (
         <div className="mt-4">
           <p className="text-green-600 break-all">📁 CID: {cid.toString()}</p>
+          {keyCid && (
+            <p className="text-green-600 break-all">🔑 Key CID: {keyCid}</p>
+          )}
           <button
             onClick={handleFetch}
             className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded mt-2"
+            disabled={!hasPrivateKey}
           >
-            Display File
+            Decrypt & Display File
           </button>
         </div>
       )}
-      {error && <p className="text-red-500">{error}</p>}
 
       {/* Display the file if a URL is available */}
       {fileUrl && (
-        <div className="mt-4">
-          {/* You might need to adjust this based on the actual file type. */}
-          <img src={fileUrl} alt="Uploaded File" className="max-w-full" />
-        </div>
+        <div className="mt-4 p-2 border rounded">
+          <h3 className="font-bold mb-2">Decrypted File:</h3>
+          {fileType?.startsWith('image/') ? (
+            <img src={fileUrl} alt="Decrypted File" className="max-w-full rounded" />
+          ) : fileType?.startsWith('video/') ? (
+            <video controls className="max-w-full rounded">
+              <source src={fileUrl} type={fileType} />
+              Your browser does not support the video tag.
+            </video>
+          ) : fileType?.startsWith('audio/') ? (
+            <audio controls className="max-w-full">
+              <source src={fileUrl} type={fileType} />
+              Your browser does not support the audio tag.
+            </audio>
+          ) : fileType?.startsWith('text/') || fileType?.includes('json') ? (
+            <div className="p-2 bg-gray-100 rounded overflow-auto max-h-60">
+              <iframe src={fileUrl} className="w-full h-60" title="Text file"></iframe>
+            </div>
+          ) : (
+            <div className="p-2 bg-gray-100 rounded text-center">
+              <p>File ready for download</p>
+              <a 
+                href={fileUrl} 
+                download={file?.name || "download"} 
+                className="bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded inline-block mt-2"
+              >
+                Download File
+              </a>
+            </div>
+          )}
+        </div>  
       )}
     </div>
   );

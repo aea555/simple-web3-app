@@ -2,7 +2,7 @@
   -Using IndexedDB via idb-keyval for storing the private key.
 */
 
-import { set, get } from "idb-keyval";
+import { set, get, del } from "idb-keyval";
 import { convertPemToBinary } from "./cryptography";
 
 /*
@@ -22,7 +22,9 @@ export async function getPrivateKey(): Promise<CryptoKey | undefined> {
 /*
   - Export CryptoKey to PEM (PKCS8 format) for download.
 */
-export async function exportPrivateKeyToPem(privateKey: CryptoKey): Promise<string> {
+export async function exportPrivateKeyToPem(
+  privateKey: CryptoKey
+): Promise<string> {
   const pkcs8 = await crypto.subtle.exportKey("pkcs8", privateKey);
   const base64 = btoa(String.fromCharCode(...new Uint8Array(pkcs8)));
   const lines = base64.match(/.{1,64}/g)?.join("\n");
@@ -66,4 +68,30 @@ export function isValidPrivateKeyPem(pem: string): boolean {
     lines[lines.length - 1]?.includes("END PRIVATE KEY") &&
     lines.length >= 3 // At least header, body, footer
   );
+}
+
+/*
+  - Store a delegation CAR file (as Uint8Array) and its expiration time (in seconds)
+*/
+export async function storeDelegation(bytes: Uint8Array, expiration: number) {
+  await set("w3up-delegation", bytes);
+  await set("w3up-delegation-exp", expiration);
+}
+
+/*
+  - Retrieve the stored delegation CAR and expiration, or return undefined if not found.
+*/
+export async function getDelegation(): Promise<{ bytes: Uint8Array; exp: number } | undefined> {
+  const bytes = await get<Uint8Array>("w3up-delegation");
+  const exp = await get<number>("w3up-delegation-exp");
+  if (!bytes || typeof exp !== "number") return undefined;
+  return { bytes, exp };
+}
+
+/*
+  - Remove delegation data from storage (e.g. when expired or invalid)
+*/
+export async function clearDelegation() {
+  await del("w3up-delegation");
+  await del("w3up-delegation-exp");
 }

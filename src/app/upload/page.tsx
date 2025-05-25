@@ -1,25 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useWallet, useAnchorWallet } from "@solana/wallet-adapter-react";
-import { uploadEncryptedAESKeyToIPFS, uploadFile } from "@/utils/ipfs";
 import {
-  encryptAESKeyWithRSA,
+  useEffect,
+  useState,
+} from "react";
+import { useWallet, useAnchorWallet } from "@solana/wallet-adapter-react";
+import { uploadEncryptedAESKey, uploadFile } from "@/utils/ipfs";
+import {
+  encryptPrivateKeyWithPassword,
   fetchRSAKey,
+  generateAESKey,
   generateRSAKeyPair,
 } from "@/utils/cryptography";
 import { CID } from "multiformats/cid";
-import { getProgram, getProgramId } from "@project/anchor";
-import { AnchorProvider } from "@coral-xyz/anchor";
-import { Connection, PublicKey, SystemProgram } from "@solana/web3.js";
-import { keccak_256 } from "js-sha3";
 import {
-  storePrivateKey,
-  getPrivateKey,
   downloadPrivateKeyPem,
-  importPrivateKeyFromPem,
-  isValidPrivateKeyPem,
+  hasEncryptedPrivateKey,
+  promptAndLoadPrivateKey,
+  promptPassword,
+  storeEncryptedPrivateKey,
 } from "@/utils/store";
+import { registerRSAKeyOnChain, storeFileMetadata } from "@/utils/chain";
+import { useSolanaProgram } from "@/hooks/useSolanaProgram";
+import { handlePrivateKeyImport } from "@/utils/helpers";
+import { SolanaProgramContext } from "@/utils/types";
 
 export default function Upload() {
   const { publicKey } = useWallet();
@@ -29,52 +33,56 @@ export default function Upload() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasPrivateKey, setHasPrivateKey] = useState<boolean>(false);
+  const solana = useSolanaProgram(anchorWallet);
 
   useEffect(() => {
-    getPrivateKey().then((key) => setHasPrivateKey(!!key));
+    hasEncryptedPrivateKey().then(setHasPrivateKey);
   }, []);
 
-  async function handleRegisterRsaKey() {
+  async function handleRegisterRsaKey(solana: SolanaProgramContext | undefined) {
     if (!publicKey || !anchorWallet) return;
 
     // Check if a private key already exists in IndexedDB
-    const existingKey = await getPrivateKey();
-    if (existingKey) {
+    const alreadyStored = await hasEncryptedPrivateKey();
+    if (alreadyStored) {
       setStatus("🔐 RSA private key already exists in your browser.");
       return;
     }
+
+    if (!solana) {
+      setError("❌ Solana program failed to initialize!");
+      return null;
+    }
+
+    const { program, programId } = solana;
 
     try {
       // Set status to indicate process has started
       setStatus("🔐 Generating and registering RSA key...");
 
-      // Setup Solana connection and Anchor provider
-      const connection = new Connection("https://api.devnet.solana.com");
-      const provider = new AnchorProvider(connection, anchorWallet, {});
-      const program = getProgram(provider);
-
       // Generate RSA key pair (2048-bit) in browser
       // This key will be used to encrypt/decrypt AES keys for files
       const { publicKeyPem, privateKey } = await generateRSAKeyPair();
 
-      // Store the private key securely in indexed-db
-      await storePrivateKey(privateKey);
+      // Store the private key in indexed-db
+      const password = promptPassword(
+        "Set a password to protect your private key (DO NOT forget it!)"
+      );
+      if (!password) {
+        setError("❌ Password is required to protect your private key.");
+        return;
+      }
+
+      const { cipherText, iv, salt } = await encryptPrivateKeyWithPassword(
+        privateKey,
+        password
+      );
+
+      await storeEncryptedPrivateKey(cipherText, iv, salt);
       setHasPrivateKey(true);
 
       // Store the public key on-chain (as a string) in the UserRSAKey PDA
-      const tx = await program.methods
-        .storeRsaKey(publicKeyPem)
-        .accounts({
-          user: publicKey, // payer and signer
-        })
-        .remainingAccounts([
-          {
-            pubkey: SystemProgram.programId, // needed for init
-            isSigner: false,
-            isWritable: false,
-          },
-        ])
-        .rpc();
+      const tx = await registerRSAKeyOnChain(publicKey, publicKeyPem, program);
 
       // Confirm registration
       console.log("RSA key stored! Tx:", tx);
@@ -88,75 +96,62 @@ export default function Upload() {
     }
   }
 
-  async function handleUpload() {
+  async function handleUpload(solana: SolanaProgramContext | undefined) {
     if (!file || !publicKey || !anchorWallet) return;
 
     setStatus("📤 Uploading file to IPFS...");
     setError(null);
 
-    const connection = new Connection("https://api.devnet.solana.com");
-    const provider = new AnchorProvider(connection, anchorWallet, {});
-    const program = getProgram(provider);
-    const programId = getProgramId("devnet");
+    if (!solana) {
+      setError("❌ Solana program failed to initialize!");
+      return null;
+    }
+
+    const { program, programId } = solana;
 
     try {
-      // 1. Fetch user's RSA public key from Solana
       const rsaKey = await fetchRSAKey(publicKey, programId, program);
       if (!rsaKey) {
         setError("❌ RSA key not found. Please register your RSA key first.");
         return;
       }
-      const { raw: rsaPem } = rsaKey;
 
-      // 2. Generate AES key
-      const aesKey = await crypto.subtle.generateKey(
-        { name: "AES-GCM", length: 256 },
-        true,
-        ["encrypt", "decrypt"]
-      );
-
-      // 3. Upload file encrypted with AES key to IPFS
+      const aesKey = await generateAESKey();
       const { cid, encryptedKey: rawAESKey } = await uploadFile(file, aesKey);
       setCid(CID.parse(cid.toString()));
 
-      // 4. Encrypt the AES key with RSA
-      const encryptedAESKey = await encryptAESKeyWithRSA(rsaPem, rawAESKey);
-      const encryptedAESKeyBase64 = btoa(
-        String.fromCharCode(...new Uint8Array(encryptedAESKey))
-      );
-
-      // Store encryptedAESKeyBase64 oon IPFS
-      const keyCid = await uploadEncryptedAESKeyToIPFS(encryptedAESKeyBase64);
+      const keyCid = await uploadEncryptedAESKey(rsaKey.raw, rawAESKey);
       setStatus(`🔐 Encrypted AES key uploaded. keyCID: ${keyCid}`);
 
       setStatus("📦 Storing file metadata on-chain...");
-
-      // 5. Store file metadata on-chain
-      const cidHash = Buffer.from(keccak_256.arrayBuffer(cid.toString()));
-      const [fileMetadataPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("file_metadata"), cidHash],
+      await storeFileMetadata(
+        program,
+        cid.toString(),
+        keyCid,
+        publicKey,
         programId
       );
-
-      await program.methods
-        .storeFileMetadata(cid.toString(), keyCid, true)
-        .accounts({
-          fileMetadata: fileMetadataPDA,
-          uploader: publicKey,
-        })
-        .remainingAccounts([
-          {
-            pubkey: SystemProgram.programId,
-            isSigner: false,
-            isWritable: false,
-          },
-        ])
-        .rpc();
 
       setStatus("✅ Upload complete!");
     } catch (err: any) {
       console.error(err);
       setError("❌ Upload failed: " + (err.message || err.toString()));
+      setStatus(null);
+    }
+  }
+
+  async function handlePrivateKeyDownload() {
+    try {
+      const key = await promptAndLoadPrivateKey();
+      if (key) 
+        await downloadPrivateKeyPem(key);
+      else
+        throw new Error;
+    }
+    catch (err: any) {
+      console.error(err);
+      setError(
+        "❌ Private key download failed: No private key found in this browser or you entered the wrong password.")
       setStatus(null);
     }
   }
@@ -178,7 +173,7 @@ export default function Upload() {
           <>
             {/* Register RSA Key */}
             <button
-              onClick={handleRegisterRsaKey}
+              onClick={() => handleRegisterRsaKey(solana)}
               className="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded"
             >
               Register RSA Key
@@ -192,47 +187,21 @@ export default function Upload() {
               <input
                 type="file"
                 accept=".pem"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-
-                  const text = await file.text();
-
-                  // ✅ Validate PEM format
-                  if (!isValidPrivateKeyPem(text)) {
-                    setError(
-                      "❌ Invalid PEM format. Please upload a valid RSA private key."
-                    );
-                    return;
-                  }
-
-                  try {
-                    // Parse and import the RSA private key
-                    const importedKey = await importPrivateKeyFromPem(text);
-                    await storePrivateKey(importedKey);
-                    setHasPrivateKey(true);
-                    setStatus("✅ Private key imported successfully!");
-                  } catch (err) {
-                    setError(
-                      "❌ Failed to import private key: " +
-                        (err as Error).message
-                    );
-                  }
-                }}
+                onChange={(e) =>
+                  handlePrivateKeyImport(
+                    e,
+                    setHasPrivateKey,
+                    setStatus,
+                    setError
+                  )
+                }
                 className="hidden"
               />
             </label>
           </>
         ) : (
           <button
-            onClick={async () => {
-              const key = await getPrivateKey();
-              if (key) {
-                await downloadPrivateKeyPem(key);
-              } else {
-                alert("No private key found in this browser.");
-              }
-            }}
+            onClick={handlePrivateKeyDownload}
             className="bg-violet-600 hover:bg-violet-700 text-white py-2 px-4 rounded"
           >
             Download Private Key
@@ -247,7 +216,7 @@ export default function Upload() {
       />
 
       <button
-        onClick={handleUpload}
+        onClick={() => handleUpload(solana)}
         disabled={!file}
         className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded disabled:opacity-50"
       >

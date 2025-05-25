@@ -3,20 +3,68 @@
 */
 
 import { set, get, del } from "idb-keyval";
-import { convertPemToBinary } from "./cryptography";
+import { convertPemToBinary, decryptPrivateKeyWithPassword } from "./cryptography";
 
 /*
   - Store the private RSA key in browser (IndexedDB).
 */
-export async function storePrivateKey(privateKey: CryptoKey) {
-  await set("rsa-private-key", privateKey);
+export async function storeEncryptedPrivateKey(
+  cipherText: Uint8Array,
+  iv: Uint8Array,
+  salt: Uint8Array
+) {
+  await set("rsa-private-key-ciphertext", cipherText);
+  await set("rsa-private-key-iv", iv);
+  await set("rsa-private-key-salt", salt);
 }
 
 /*
   - Retrieve the private RSA key from browser storage.
 */
-export async function getPrivateKey(): Promise<CryptoKey | undefined> {
-  return await get("rsa-private-key");
+export async function getDecryptedPrivateKey(password: string): Promise<CryptoKey | undefined> {
+  const cipherText = await get<Uint8Array>("rsa-private-key-ciphertext");
+  const iv = await get<Uint8Array>("rsa-private-key-iv");
+  const salt = await get<Uint8Array>("rsa-private-key-salt");
+
+  if (!cipherText || !iv || !salt) return undefined;
+
+  try {
+    return await decryptPrivateKeyWithPassword(cipherText, password, iv, salt);
+  } catch (e) {
+    console.error("❌ Failed to decrypt private key:", e);
+    return undefined;
+  }
+}
+
+/*
+  - Check if there is an encrypted private key stored.
+*/
+export async function hasEncryptedPrivateKey(): Promise<boolean> {
+  const cipherText = await get<Uint8Array>("rsa-private-key-ciphertext");
+  const iv = await get<Uint8Array>("rsa-private-key-iv");
+  const salt = await get<Uint8Array>("rsa-private-key-salt");
+
+  return !!(cipherText && iv && salt);
+}
+
+/**
+ * Prompts user for RSA key password and tries to decrypt it.
+ * Throws if password is missing or decryption fails.
+ */
+export async function promptAndLoadPrivateKey(): Promise<CryptoKey> {
+  const password = prompt("Enter the password to unlock your private RSA key:");
+  if (!password) throw new Error("Password is required to decrypt private key.");
+
+  const privateKey = await getDecryptedPrivateKey(password);
+  if (!privateKey) throw new Error("Invalid password or failed to decrypt private key.");
+
+  return privateKey;
+}
+
+export function promptPassword(message: string = "Enter your private key password"): string | null {
+  const password = prompt(message);
+  if (!password || password.trim() === "") return null;
+  return password;
 }
 
 /*

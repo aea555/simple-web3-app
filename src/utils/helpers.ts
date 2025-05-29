@@ -1,7 +1,5 @@
-import { encryptPrivateKeyWithPassword } from "./cryptography";
+import { decryptPrivateKeyWithPassword } from "./cryptography";
 import {
-  importPrivateKeyFromPem,
-  isValidPrivateKeyPem,
   storeEncryptedPrivateKey,
 } from "./store";
 
@@ -44,31 +42,40 @@ export async function handlePrivateKeyImport(
   const file = e.target.files?.[0];
   if (!file) return;
 
-  const text = await file.text();
+  const pemText = await file.text();
 
-  if (!isValidPrivateKeyPem(text)) {
-    setError("❌ Invalid PEM format. Please upload a valid RSA private key.");
-    return;
-  }
-
-  const password = prompt(
-    "Set a password to protect your private key (this is NOT the original PEM password)"
-  );
-  if (!password) {
-    setError("❌ Password is required to protect the private key.");
+  if (
+    !pemText.includes("BEGIN ENCRYPTED RSA PRIVATE KEY") ||
+    !pemText.includes("END ENCRYPTED RSA PRIVATE KEY")
+  ) {
+    setError("❌ Invalid encrypted PEM format.");
     return;
   }
 
   try {
-    const importedKey = await importPrivateKeyFromPem(text);
-    const { cipherText, iv, salt } = await encryptPrivateKeyWithPassword(
-      importedKey,
-      password
+    const password = prompt("Enter the password used to encrypt this key:");
+    if (!password) throw new Error("Missing password");
+
+    const b64 = pemText.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+    const decoded = JSON.parse(atob(b64));
+
+    const privateKey = await decryptPrivateKeyWithPassword(
+      new Uint8Array(decoded.cipher),
+      password,
+      new Uint8Array(decoded.iv),
+      new Uint8Array(decoded.salt)
     );
-    await storeEncryptedPrivateKey(cipherText, iv, salt);
+
+    await storeEncryptedPrivateKey(
+      new Uint8Array(decoded.cipher),
+      new Uint8Array(decoded.iv),
+      new Uint8Array(decoded.salt)
+    );
+
     setHasPrivateKey(true);
-    setStatus("✅ Private key imported and encrypted successfully!");
+    setStatus("✅ Encrypted private key imported successfully!");
   } catch (err) {
-    setError("❌ Failed to import private key: " + (err as Error).message);
+    setError("❌ Failed to import encrypted private key: " + (err as Error).message);
   }
 }
+

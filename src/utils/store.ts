@@ -3,7 +3,7 @@
 */
 
 import { set, get, del } from "idb-keyval";
-import { convertPemToBinary, decryptPrivateKeyWithPassword } from "./cryptography";
+import { convertPemToBinary, decryptPrivateKeyWithPassword, encryptPrivateKeyWithPassword } from "./cryptography";
 
 /*
   - Store the private RSA key in browser (IndexedDB).
@@ -51,14 +51,14 @@ export async function hasEncryptedPrivateKey(): Promise<boolean> {
  * Prompts user for RSA key password and tries to decrypt it.
  * Throws if password is missing or decryption fails.
  */
-export async function promptAndLoadPrivateKey(): Promise<CryptoKey> {
+export async function promptAndLoadPrivateKey(): Promise<{privateKey: CryptoKey, password: string}>{
   const password = prompt("Enter the password to unlock your private RSA key:");
   if (!password) throw new Error("Password is required to decrypt private key.");
 
   const privateKey = await getDecryptedPrivateKey(password);
   if (!privateKey) throw new Error("Invalid password or failed to decrypt private key.");
 
-  return privateKey;
+  return {privateKey, password};
 }
 
 export function promptPassword(message: string = "Enter your private key password"): string | null {
@@ -70,25 +70,31 @@ export function promptPassword(message: string = "Enter your private key passwor
 /*
   - Export CryptoKey to PEM (PKCS8 format) for download.
 */
-export async function exportPrivateKeyToPem(
-  privateKey: CryptoKey
+export async function exportEncryptedPrivateKeyToPem(
+  privateKey: CryptoKey,
+  password: string
 ): Promise<string> {
-  const pkcs8 = await crypto.subtle.exportKey("pkcs8", privateKey);
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(pkcs8)));
-  const lines = base64.match(/.{1,64}/g)?.join("\n");
-  return `-----BEGIN PRIVATE KEY-----\n${lines}\n-----END PRIVATE KEY-----`;
+  const { cipherText, iv, salt } = await encryptPrivateKeyWithPassword(privateKey, password);
+  const payload = JSON.stringify({
+    iv: Array.from(iv),
+    salt: Array.from(salt),
+    cipher: Array.from(cipherText)
+  });
+  const b64 = btoa(payload);
+  const pemLines = b64.match(/.{1,64}/g)?.join("\n");
+  return `-----BEGIN ENCRYPTED RSA PRIVATE KEY-----\n${pemLines}\n-----END ENCRYPTED RSA PRIVATE KEY-----`;
 }
 
 /*
   - Trigger download of the PEM string as a .pem file.
 */
-export async function downloadPrivateKeyPem(privateKey: CryptoKey) {
-  const pem = await exportPrivateKeyToPem(privateKey);
+export async function downloadEncryptedPrivateKeyPem(privateKey: CryptoKey, password: string) {
+  const pem = await exportEncryptedPrivateKeyToPem(privateKey, password);
   const blob = new Blob([pem], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "private-key.pem";
+  a.download = "encrypted-private-key.pem";
   a.click();
 }
 

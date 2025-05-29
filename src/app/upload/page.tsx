@@ -14,7 +14,7 @@ import {
 } from "@/utils/cryptography";
 import { CID } from "multiformats/cid";
 import {
-  downloadPrivateKeyPem,
+  downloadEncryptedPrivateKeyPem,
   hasEncryptedPrivateKey,
   promptAndLoadPrivateKey,
   promptPassword,
@@ -142,16 +142,16 @@ export default function Upload() {
 
   async function handlePrivateKeyDownload() {
     try {
-      const key = await promptAndLoadPrivateKey();
-      if (key) 
-        await downloadPrivateKeyPem(key);
-      else
-        throw new Error;
-    }
-    catch (err: any) {
+      const {privateKey, password} = await promptAndLoadPrivateKey(); // Prompt for decryption password
+      if (!privateKey) throw new Error("Private key not found or wrong password.");
+      
+      await downloadEncryptedPrivateKeyPem(privateKey, password); // Encrypt and download
+      setStatus("✅ Encrypted PEM file downloaded.");
+    } catch (err: any) {
       console.error(err);
       setError(
-        "❌ Private key download failed: No private key found in this browser or you entered the wrong password.")
+        "❌ Private key download failed: No private key found in this browser or password was incorrect."
+      );
       setStatus(null);
     }
   }

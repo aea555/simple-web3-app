@@ -78,7 +78,7 @@ export async function fetchAndDecryptFile(
   fileMeta: FileMetadata
 ): Promise<Blob> {
   // 1. Load user's private RSA key
-  const privateKey = await promptAndLoadPrivateKey();
+  const { privateKey } = await promptAndLoadPrivateKey();
   if (!privateKey) throw new Error("Invalid password or corrupted key data.");
 
   // 2. Fetch encrypted AES key JSON from IPFS

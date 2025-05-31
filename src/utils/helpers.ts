@@ -1,9 +1,11 @@
-import { AnchorProvider, Program } from "@coral-xyz/anchor";
-import { Connection, PublicKey } from "@solana/web3.js";
-import { getProgram, getProgramId, RsaStorage } from "@project/anchor";
-import { AnchorWallet } from "@solana/wallet-adapter-react";
+import { decryptPrivateKeyWithPassword } from "./cryptography";
+import {
+  storeEncryptedPrivateKey,
+} from "./store";
 
-export async function asyncIterableToArrayBuffer(asyncIterable: AsyncIterable<Uint8Array>): Promise<ArrayBuffer> {
+export async function asyncIterableToArrayBuffer(
+  asyncIterable: AsyncIterable<Uint8Array>
+): Promise<ArrayBuffer> {
   const chunks: Uint8Array[] = [];
 
   for await (const chunk of asyncIterable) {
@@ -12,32 +14,68 @@ export async function asyncIterableToArrayBuffer(asyncIterable: AsyncIterable<Ui
 
   const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
   const mergedArray = new Uint8Array(totalLength);
-  
+
   let offset = 0;
   for (const chunk of chunks) {
     mergedArray.set(chunk, offset);
     offset += chunk.length;
   }
 
-  return mergedArray.buffer; 
+  return mergedArray.buffer;
 }
 
-export async function importRSAPublicKeyFromSolana(user: PublicKey, prog: Program<RsaStorage>): Promise<CryptoKey> {
-  const [userRsaPDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from("user_rsa"), user.toBuffer()],
-    getProgramId("devnet")
-  );
-
-  const account = await prog.account.userRsaKey.fetch(userRsaPDA);
-  const base64Key = account.rsaKey;
-
-  const binaryKey = Buffer.from(base64Key, "base64");
-
-  return await crypto.subtle.importKey(
-    "spki",
-    binaryKey.buffer,
-    { name: "RSA-OAEP", hash: "SHA-256" },
-    true,
-    ["encrypt"]
-  );
+export function base64ToArrayBuffer(b64: string): ArrayBuffer {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
 }
+
+export async function handlePrivateKeyImport(
+  e: React.ChangeEvent<HTMLInputElement>,
+  setHasPrivateKey: (value: boolean) => void,
+  setStatus: (value: string | null) => void,
+  setError: (value: string | null) => void
+) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const pemText = await file.text();
+
+  if (
+    !pemText.includes("BEGIN ENCRYPTED RSA PRIVATE KEY") ||
+    !pemText.includes("END ENCRYPTED RSA PRIVATE KEY")
+  ) {
+    setError("❌ Invalid encrypted PEM format.");
+    return;
+  }
+
+  try {
+    const password = prompt("Enter the password used to encrypt this key:");
+    if (!password) throw new Error("Missing password");
+
+    const b64 = pemText.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+    const decoded = JSON.parse(atob(b64));
+
+    const privateKey = await decryptPrivateKeyWithPassword(
+      new Uint8Array(decoded.cipher),
+      password,
+      new Uint8Array(decoded.iv),
+      new Uint8Array(decoded.salt)
+    );
+
+    await storeEncryptedPrivateKey(
+      new Uint8Array(decoded.cipher),
+      new Uint8Array(decoded.iv),
+      new Uint8Array(decoded.salt)
+    );
+
+    setHasPrivateKey(true);
+    setStatus("✅ Encrypted private key imported successfully!");
+  } catch (err) {
+    setError("❌ Failed to import encrypted private key: " + (err as Error).message);
+  }
+}
+

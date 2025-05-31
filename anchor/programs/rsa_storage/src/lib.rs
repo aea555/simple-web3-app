@@ -23,10 +23,12 @@ pub mod rsa_storage {
     pub fn store_file_metadata(
         ctx: Context<StoreFileMetadata>,
         cid: String,
+        key_cid: String,
         is_public: bool,
     ) -> Result<()> {
         let metadata = &mut ctx.accounts.file_metadata;
         metadata.cid = cid;
+        metadata.key_cid = key_cid;
         metadata.uploader = ctx.accounts.uploader.key();
         metadata.timestamp = Clock::get()?.unix_timestamp;
         metadata.is_public = is_public;
@@ -41,7 +43,7 @@ pub struct Initialize {}
 #[instruction()]
 pub struct StoreKey<'info> {
     #[account(
-        init,
+        init_if_needed,
         seeds = [b"user_rsa", user.key().as_ref()],
         bump,
         payer = user,
@@ -73,7 +75,7 @@ pub struct StoreFileMetadata<'info> {
         seeds = [b"file_metadata", &keccak::hash(cid.as_bytes()).to_bytes()[..]],
         bump,
         payer = uploader,
-        space = 8 + 128 + 32 + 8 + 1 
+        space = 8 + 128 + 128 + 32 + 8 + 1 // 128 bytes for Cid, 128 bytes for key cid
     )]
     pub file_metadata: Account<'info, FileMetadata>,
 
@@ -90,6 +92,7 @@ pub struct UserRSAKey {
 #[account]
 pub struct FileMetadata {
     pub cid: String,             // IPFS CID
+    pub key_cid: String,         // IPFS Aes key CID
     pub uploader: Pubkey,        // who uploaded
     pub timestamp: i64,          // UNIX timestamp
     pub is_public: bool,         // access policy

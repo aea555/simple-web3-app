@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useWallet, useAnchorWallet } from "@solana/wallet-adapter-react";
 import { fetchUserFiles, fetchFileMetadataByCID } from "@/utils/chain";
 import { fetchAndDecryptFile } from "@/utils/ipfs";
@@ -18,6 +18,7 @@ export default function FetchPage() {
   const [userFiles, setUserFiles] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [timeFilter, setTimeFilter] = useState<string>("all"); // 'all', 'today', 'last7days', 'last30days'
   const solana = useSolanaProgram(anchorWallet);
 
   useEffect(() => {
@@ -31,7 +32,7 @@ export default function FetchPage() {
       setError(null);
       try {
         const files = await fetchUserFiles(solana.program, publicKey);
-        files.sort((a: any, b: any) => b.timestamp - a.timestamp);
+        files.sort((a: any, b: any) => b.timestamp - a.timestamp); // Sort by newest first
         setUserFiles(files);
       } catch (err) {
         console.error("Failed to fetch user files:", err);
@@ -44,6 +45,36 @@ export default function FetchPage() {
 
     loadUserFiles();
   }, [publicKey, anchorWallet, solana]);
+
+  // Helper function to check if a timestamp is within a given date range
+  const isWithinTimeRange = (timestamp: number, filter: string) => {
+    const fileDate = new Date(timestamp * 1000); // Convert Unix timestamp to Date object
+    const now = new Date();
+    now.setHours(0, 0, 0, 0); // Normalize 'now' to start of today
+
+    switch (filter) {
+      case 'today':
+        return fileDate.toDateString() === now.toDateString();
+      case 'last3days':
+        const threeDaysAgo = new Date(now.getTime() - (3 * 24 * 60 * 60 * 1000));
+        return fileDate >= threeDaysAgo && fileDate <= new Date();
+      case 'last7days':
+        const sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+        return fileDate >= sevenDaysAgo && fileDate <= new Date();
+      case 'last30days':
+        const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+        return fileDate >= thirtyDaysAgo && fileDate <= new Date();
+      case 'all':
+      default:
+        return true;
+    }
+  };
+
+  // Memoized filtered files array
+  const filteredFiles = useMemo(() => {
+    if (!userFiles) return [];
+    return userFiles.filter(file => isWithinTimeRange(file.timestamp, timeFilter));
+  }, [userFiles, timeFilter]);
 
   async function handleDecrypt(metadata: any) {
     if (!publicKey || !anchorWallet || !solana) {
@@ -121,20 +152,17 @@ export default function FetchPage() {
   return (
     <div className="flex flex-col items-center min-h-screen-minus-nav px-4 sm:px-6 lg:px-8">
       {/* Top Section: Left and Right Columns for AppHero and Decrypt by CID */}
-      {/* Added `items-stretch` to make columns equal height */}
       <div className="flex flex-col lg:flex-row justify-center w-full max-w-7xl mx-auto pt-8 pb-6 items-stretch">
         {/* Left Column: Title */}
-        {/* Added `flex` and `items-center justify-center` to vertically and horizontally center AppHero within its column height */}
-        <div className="lg:w-1/2 flex items-center justify-center lg:justify-end mb-0 lg:pr-8 lg:mb-0">
+        <div className="lg:w-1/2 flex items-center justify-center lg:justify-end lg:pr-8 mb-8 lg:mb-0">
           <AppHero
-            className="mb-0"
             title="Access Your Encrypted Files"
             subtitle="Retrieve and decrypt your private data stored on IPFS."
+            className="mb-0" // Override AppHero's default mb-8
           />
         </div>
 
         {/* Right Column: Main Content for Decrypt by CID */}
-        {/* Added `flex flex-col justify-center` to vertically center content within this column */}
         <div className="flex-1 lg:w-1/2 w-full max-w-2xl p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg space-y-6 mx-auto lg:mx-0 flex flex-col justify-center">
           {/* Wallet Connection Status */}
           <div className="text-center mb-4">
@@ -177,7 +205,25 @@ export default function FetchPage() {
 
       {/* Your Uploaded Files Section (Full Width) */}
       <div className="w-full max-w-4xl p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg space-y-6 mt-8 mx-auto">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Your Uploaded Files</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Your Uploaded Files</h2>
+          <div className="flex items-center space-x-2">
+            <label htmlFor="timeFilter" className="text-sm font-medium text-gray-700 dark:text-gray-300">Sort by:</label>
+            <select
+              id="timeFilter"
+              value={timeFilter}
+              onChange={(e) => setTimeFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-violet-500 focus:border-violet-500 transition duration-200 text-sm"
+            >
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="last3days">Last 3 Days</option>
+              <option value="last7days">Last 7 Days</option>
+              <option value="last30days">Last 30 Days</option>
+            </select>
+          </div>
+        </div>
+
         {loading && (
           <div className="text-center py-4">
             <span className="loading loading-spinner loading-md text-violet-600"></span>
@@ -190,8 +236,11 @@ export default function FetchPage() {
         {!loading && !publicKey && (
           <p className="text-gray-600 dark:text-gray-400 text-center py-4">Connect your wallet to see your uploaded files.</p>
         )}
+        {!loading && publicKey && filteredFiles.length === 0 && userFiles.length > 0 && (
+          <p className="text-gray-600 dark:text-gray-400 text-center py-4">No files match the selected time filter.</p>
+        )}
         <div className="space-y-3">
-          {userFiles.map((file) => (
+          {filteredFiles.map((file) => (
             <div
               key={file.pubkey.toBase58()}
               className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700"

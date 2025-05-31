@@ -19,6 +19,8 @@ export default function FetchPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [timeFilter, setTimeFilter] = useState<string>("all"); // 'all', 'today', 'last7days', 'last30days'
+  const [sortKey, setSortKey] = useState<string>("timestamp"); // 'timestamp', 'cid' (for name)
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc"); // 'desc', 'asc'
   const solana = useSolanaProgram(anchorWallet);
 
   useEffect(() => {
@@ -31,8 +33,8 @@ export default function FetchPage() {
       setLoading(true);
       setError(null);
       try {
+        // Fetch files, initial sort is by timestamp (newest first)
         const files = await fetchUserFiles(solana.program, publicKey);
-        files.sort((a: any, b: any) => b.timestamp - a.timestamp); // Sort by newest first
         setUserFiles(files);
       } catch (err) {
         console.error("Failed to fetch user files:", err);
@@ -55,9 +57,6 @@ export default function FetchPage() {
     switch (filter) {
       case 'today':
         return fileDate.toDateString() === now.toDateString();
-      case 'last3days':
-        const threeDaysAgo = new Date(now.getTime() - (3 * 24 * 60 * 60 * 1000));
-        return fileDate >= threeDaysAgo && fileDate <= new Date();
       case 'last7days':
         const sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
         return fileDate >= sevenDaysAgo && fileDate <= new Date();
@@ -70,11 +69,25 @@ export default function FetchPage() {
     }
   };
 
-  // Memoized filtered files array
-  const filteredFiles = useMemo(() => {
+  // Memoized and sorted files array based on filters and sort options
+  const sortedAndFilteredFiles = useMemo(() => {
     if (!userFiles) return [];
-    return userFiles.filter(file => isWithinTimeRange(file.timestamp, timeFilter));
-  }, [userFiles, timeFilter]);
+
+    // 1. Apply time filter
+    const filtered = userFiles.filter(file => isWithinTimeRange(file.timestamp, timeFilter));
+
+    // 2. Apply sorting
+    return [...filtered].sort((a, b) => {
+      let comparison = 0;
+      if (sortKey === 'timestamp') {
+        comparison = a.timestamp - b.timestamp;
+      } else if (sortKey === 'cid') { // Sort by CID as a proxy for 'name'
+        comparison = a.cid.localeCompare(b.cid);
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [userFiles, timeFilter, sortKey, sortOrder]);
 
   async function handleDecrypt(metadata: any) {
     if (!publicKey || !anchorWallet || !solana) {
@@ -205,22 +218,53 @@ export default function FetchPage() {
 
       {/* Your Uploaded Files Section (Full Width) */}
       <div className="w-full max-w-4xl p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg space-y-6 mt-8 mx-auto">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-col sm:flex-row justify-between items-center mb-4 space-y-3 sm:space-y-0">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Your Uploaded Files</h2>
-          <div className="flex items-center space-x-2">
-            <label htmlFor="timeFilter" className="text-sm font-medium text-gray-700 dark:text-gray-300">Sort by:</label>
-            <select
-              id="timeFilter"
-              value={timeFilter}
-              onChange={(e) => setTimeFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-violet-500 focus:border-violet-500 transition duration-200 text-sm"
-            >
-              <option value="all">All Time</option>
-              <option value="today">Today</option>
-              <option value="last3days">Last 3 Days</option>
-              <option value="last7days">Last 7 Days</option>
-              <option value="last30days">Last 30 Days</option>
-            </select>
+          <div className="flex items-center space-x-4">
+            {/* Sort by Time Filter */}
+            <div className="flex items-center space-x-2">
+              <label htmlFor="timeFilter" className="text-sm font-medium text-gray-700 dark:text-gray-300">Filter:</label>
+              <select
+                id="timeFilter"
+                value={timeFilter}
+                onChange={(e) => setTimeFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-violet-500 focus:border-violet-500 transition duration-200 text-sm"
+              >
+                <option value="all">All Time</option>
+                <option value="today">Today</option>
+                <option value="last7days">Last 7 Days</option>
+                <option value="last30days">Last 30 Days</option>
+              </select>
+            </div>
+
+            {/* Sort by Name/Date */}
+            <div className="flex items-center space-x-2">
+              <label htmlFor="sortKey" className="text-sm font-medium text-gray-700 dark:text-gray-300">Sort by:</label>
+              <select
+                id="sortKey"
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-violet-500 focus:border-violet-500 transition duration-200 text-sm"
+              >
+                <option value="timestamp">Date</option>
+                <option value="cid">Name (CID)</option>
+              </select>
+              <button
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                className="p-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg transition duration-200"
+                aria-label={sortOrder === 'asc' ? 'Sort Descending' : 'Sort Ascending'}
+              >
+                {sortOrder === 'asc' ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4 4m0 0l4-4m-4 4V4" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -236,11 +280,11 @@ export default function FetchPage() {
         {!loading && !publicKey && (
           <p className="text-gray-600 dark:text-gray-400 text-center py-4">Connect your wallet to see your uploaded files.</p>
         )}
-        {!loading && publicKey && filteredFiles.length === 0 && userFiles.length > 0 && (
-          <p className="text-gray-600 dark:text-gray-400 text-center py-4">No files match the selected time filter.</p>
+        {!loading && publicKey && sortedAndFilteredFiles.length === 0 && userFiles.length > 0 && (
+          <p className="text-gray-600 dark:text-gray-400 text-center py-4">No files match the selected filter and sort options.</p>
         )}
         <div className="space-y-3">
-          {filteredFiles.map((file) => (
+          {sortedAndFilteredFiles.map((file) => (
             <div
               key={file.pubkey.toBase58()}
               className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700"

@@ -212,108 +212,112 @@ export default function UploadPage() {
 
 
   return (
-    <div className="flex justify-center min-h-screen-minus-nav">
-      {/* Left Column: Title */}
-      <div className="flex-col items-center justify-center pr-8"> {/* Added pr-8 for some spacing */}
-        <AppHero
-          className="mb-0"
-          title="Upload Encrypted Files"
-          subtitle="Encrypt and store your files securely on IPFS, with metadata on Solana."
-        />
-      </div>
-
-      {/* Right Column: Main Content */}
-      <div className="w-full max-w-2xl p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg space-y-6">
-        {/* Wallet Connection Status */}
-        <div className="text-center mb-4">
-          {publicKey ? (
-            <p className="text-sm text-gray-700 dark:text-gray-300">
-              Connected Wallet: <span className="font-semibold text-violet-600 dark:text-violet-400">{ellipsify(publicKey.toBase58())}</span>
-            </p>
-          ) : (
-            <p className="text-sm text-red-600 dark:text-red-400">Please connect your Solana wallet to upload files.</p>
-          )}
-        </div>
-
-        {/* RSA Key Management Section */}
-        <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 shadow-sm space-y-4">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">RSA Private Key Management</h2>
-          {!hasPrivateKey ? (
-            <div className="flex flex-col gap-4">
-              <button
-                onClick={handleRegisterRsaKey}
-                className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75"
-                disabled={loading || !publicKey}
-              >
-                Register New RSA Key
-              </button>
-
-              <div className="flex items-center justify-center text-gray-700 dark:text-gray-300">
-                <hr className="flex-grow border-gray-300 dark:border-gray-600" />
-                <span className="px-3 font-bold">OR</span>
-                <hr className="flex-grow border-gray-300 dark:border-gray-600" />
-              </div>
-
-              <label className="cursor-pointer w-full px-6 py-3 bg-rose-700 hover:bg-rose-800 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 text-center disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-opacity-75">
-                Import RSA Private Key (.pem)
-                <input
-                  type="file"
-                  accept=".pem"
-                  onChange={handleImportWrapper}
-                  className="hidden"
-                  disabled={loading || !publicKey}
-                />
-              </label>
-            </div>
-          ) : (
-            <button
-              onClick={handlePrivateKeyDownload}
-              className="w-full px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-opacity-75"
-              disabled={loading}
-            >
-              Download My Encrypted Private Key
-            </button>
-          )}
-        </div>
-
-        {/* File Upload Section */}
-        <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 shadow-sm space-y-4">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Upload File</h2>
-          <input
-            type="file"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-blue-500 focus:border-blue-500 transition duration-200 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            disabled={loading || !publicKey || !hasPrivateKey}
+    // Main container with full width, centered content, and responsive padding
+    <div className="flex flex-col items-center min-h-screen-minus-nav px-4 sm:px-6 lg:px-8">
+      {/* Top Section: Left and Right Columns for AppHero and Main Content */}
+      <div className="flex flex-col lg:flex-row justify-center w-full max-w-7xl mx-auto pt-8 pb-6 items-stretch">
+        {/* Left Column: AppHero Title */}
+        <div className="lg:w-1/2 flex items-center justify-center lg:justify-end lg:pr-8 mb-8 lg:mb-0">
+          <AppHero
+            className="mb-0" // Override AppHero's default mb-8
+            title="Upload Encrypted Files"
+            subtitle="Encrypt and store your files securely on IPFS, with metadata on Solana."
           />
-
-          <button
-            onClick={handleUpload}
-            disabled={!file || loading || !publicKey || !hasPrivateKey}
-            className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75"
-          >
-            {loading ? (
-              <span className="flex items-center justify-center">
-                <span className="loading loading-spinner loading-sm mr-2"></span> Uploading...
-              </span>
-            ) : (
-              "Upload Encrypted File"
-            )}
-          </button>
-
-          {cid && (
-            <p className="text-green-600 dark:text-green-400 break-all text-sm mt-4">
-              📁 File CID: <span className="font-mono">{cid.toString()}</span>
-            </p>
-          )}
         </div>
 
-        {/* Global Error Display */}
-        {error && (
-          <div className="p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg border border-red-200 dark:border-red-700">
-            <p className="font-medium">Error:</p>
-            <p className="text-sm">{error}</p>
+        {/* Right Column: Main Content (Wallet Status, RSA Key Management, File Upload) */}
+        <div className="flex-1 lg:w-1/2 w-full max-w-2xl p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg space-y-6 mx-auto lg:mx-0 flex flex-col justify-center">
+          {/* Wallet Connection Status */}
+          <div className="text-center mb-4">
+            {publicKey ? (
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                Connected Wallet: <span className="font-semibold text-violet-600 dark:text-violet-400">{ellipsify(publicKey.toBase58())}</span>
+              </p>
+            ) : (
+              <p className="text-sm text-red-600 dark:text-red-400">Please connect your Solana wallet to upload files.</p>
+            )}
           </div>
-        )}
+
+          {/* RSA Key Management Section */}
+          <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 shadow-sm space-y-4">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">RSA Private Key Management</h2>
+            {!hasPrivateKey ? (
+              <div className="flex flex-col gap-4">
+                <button
+                  onClick={handleRegisterRsaKey}
+                  className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75"
+                  disabled={loading || !publicKey}
+                >
+                  Register New RSA Key
+                </button>
+
+                <div className="flex items-center justify-center text-gray-700 dark:text-gray-300">
+                  <hr className="flex-grow border-gray-300 dark:border-gray-600" />
+                  <span className="px-3 font-bold">OR</span>
+                  <hr className="flex-grow border-gray-300 dark:border-gray-600" />
+                </div>
+
+                <label className="cursor-pointer w-full px-6 py-3 bg-rose-700 hover:bg-rose-800 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 text-center disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-opacity-75">
+                  Import RSA Private Key (.pem)
+                  <input
+                    type="file"
+                    accept=".pem"
+                    onChange={handleImportWrapper}
+                    className="hidden"
+                    disabled={loading || !publicKey}
+                  />
+                </label>
+              </div>
+            ) : (
+              <button
+                onClick={handlePrivateKeyDownload}
+                className="w-full px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-opacity-75"
+                disabled={loading}
+              >
+                Download My Encrypted Private Key
+              </button>
+            )}
+          </div>
+
+          {/* File Upload Section */}
+          <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 shadow-sm space-y-4">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Upload File</h2>
+            <input
+              type="file"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-blue-500 focus:border-blue-500 transition duration-200 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              disabled={loading || !publicKey || !hasPrivateKey}
+            />
+
+            <button
+              onClick={handleUpload}
+              disabled={!file || loading || !publicKey || !hasPrivateKey}
+              className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75"
+            >
+              {loading ? (
+                <span className="flex items-center justify-center">
+                  <span className="loading loading-spinner loading-sm mr-2"></span> Uploading...
+                </span>
+              ) : (
+                "Upload Encrypted File"
+              )}
+            </button>
+
+            {cid && (
+              <p className="text-green-600 dark:text-green-400 break-all text-sm mt-4">
+                📁 File CID: <span className="font-mono">{cid.toString()}</span>
+              </p>
+            )}
+          </div>
+
+          {/* Global Error Display */}
+          {error && (
+            <div className="p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg border border-red-200 dark:border-red-700">
+              <p className="font-medium">Error:</p>
+              <p className="text-sm">{error}</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

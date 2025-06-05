@@ -149,3 +149,16 @@ export async function clearDelegation() {
   await del("w3up-delegation");
   await del("w3up-delegation-exp");
 }
+
+export async function storeW3SpaceDID(did: string) {
+  await set("w3up-space-did", did);
+}
+
+export async function getW3SpaceDID(): Promise<`did:${string}:${string}` | undefined> {
+  return await get("w3up-space-did");
+}
+
+export async function clearW3Setup() {
+  await del("w3up-space-did");
+  await clearDelegation();
+}

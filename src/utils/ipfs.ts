@@ -1,17 +1,18 @@
 import { CID } from "multiformats/cid";
 import { base64ToArrayBuffer } from "./helpers";
 import { FileMetadata } from "./types";
-import { initWeb3Client } from "./web3client";
 import { AnyLink } from "@web3-storage/w3up-client/types";
 import { decryptAESKey, encryptAESKeyBase64 } from "./cryptography";
-import { getDecryptedPrivateKey, promptAndLoadPrivateKey } from "./store";
+import { promptAndLoadPrivateKey } from "./store";
+import { create } from "@web3-storage/w3up-client";
 
 /**
  * Encrypts a file with AES-GCM, uploads it to Web3.Storage, and returns its CID + exported AES key.
  */
 export async function uploadFile(
   file: File,
-  aesKey: CryptoKey
+  aesKey: CryptoKey,
+  client: Awaited<ReturnType<typeof create>>
 ): Promise<{ cid: AnyLink; encryptedKey: ArrayBuffer }> {
   // Read file into ArrayBuffer
   const fileBuffer = await file.arrayBuffer();
@@ -33,7 +34,6 @@ export async function uploadFile(
   encryptedBuffer.set(new Uint8Array(encrypted), iv.length);
 
   // Upload to Web3.Storage using W3UP
-  const client = await initWeb3Client();
   const encryptedFile = new File([encryptedBuffer], "encrypted.bin", {
     type: "application/octet-stream",
   });
@@ -120,10 +120,9 @@ export async function fetchAndDecryptFile(
  * @returns CID string of the uploaded JSON file
  */
 export async function uploadEncryptedAESKeyToIPFS(
-  encryptedKeyBase64: string
+  encryptedKeyBase64: string,
+  client: Awaited<ReturnType<typeof create>>
 ): Promise<string> {
-  const client = await initWeb3Client();
-
   const keyJson = JSON.stringify({
     encrypted_aes_key: encryptedKeyBase64,
   });
@@ -139,11 +138,12 @@ export async function uploadEncryptedAESKeyToIPFS(
 
 export async function uploadEncryptedAESKey(
   publicKeyPem: string,
-  rawAESKey: ArrayBuffer
+  rawAESKey: ArrayBuffer,
+  client: Awaited<ReturnType<typeof create>>
 ): Promise<string> {
   const encryptedAESKeyBase64 = await encryptAESKeyBase64(
     publicKeyPem,
     rawAESKey
   );
-  return await uploadEncryptedAESKeyToIPFS(encryptedAESKeyBase64);
+  return await uploadEncryptedAESKeyToIPFS(encryptedAESKeyBase64, client);
 }

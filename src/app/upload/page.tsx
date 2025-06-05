@@ -23,9 +23,9 @@ import {
 import { registerRSAKeyOnChain, storeFileMetadata } from "@/utils/chain";
 import { useSolanaProgram } from "@/hooks/useSolanaProgram";
 import { handlePrivateKeyImport } from "@/utils/helpers";
-import { SolanaProgramContext } from "@/utils/types";
 import { AppHero, ellipsify } from "@/components/ui/ui-layout"; // Import AppHero and ellipsify
 import toast from "react-hot-toast"; // Import toast for notifications
+import { useW3 } from "@/context/w3Context";
 
 export default function UploadPage() {
   const { publicKey } = useWallet();
@@ -36,6 +36,8 @@ export default function UploadPage() {
   const [error, setError] = useState<string | null>(null);
   const [hasPrivateKey, setHasPrivateKey] = useState<boolean>(false);
   const solana = useSolanaProgram(anchorWallet);
+  const { client } = useW3();
+
 
   // Check for private key existence on component mount
   useEffect(() => {
@@ -144,13 +146,13 @@ export default function UploadPage() {
       // 2. Generate AES Key & Encrypt File
       toast.loading("Encrypting file and uploading to IPFS...", { id: 'uploadToast' });
       const aesKey = await generateAESKey();
-      const { cid: fileCid, encryptedKey: rawAESKey } = await uploadFile(file, aesKey);
+      const { cid: fileCid, encryptedKey: rawAESKey } = await uploadFile(file, aesKey, client);
       setCid(CID.parse(fileCid.toString()));
       toast.success("File encrypted and uploaded to IPFS!", { id: 'uploadToast' });
 
       // 3. Encrypt AES Key with RSA and Upload to IPFS
       toast.loading("Encrypting AES key and uploading to IPFS...", { id: 'uploadToast' });
-      const keyCid = await uploadEncryptedAESKey(rsaKey.raw, rawAESKey);
+      const keyCid = await uploadEncryptedAESKey(rsaKey.raw, rawAESKey, client);
       toast.success(`Encrypted AES key uploaded. Key CID: ${ellipsify(keyCid)}`, { id: 'uploadToast' });
 
       // 4. Store File Metadata On-Chain

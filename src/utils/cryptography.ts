@@ -4,7 +4,10 @@ import { PublicKey } from "@solana/web3.js";
  * Encrypts a raw AES key using an RSA public key (in PEM format),
  * then encodes the result in base64 for easy JSON transport.
  */
-export async function encryptAESKeyBase64(rsaPem: string, rawAESKey: ArrayBuffer): Promise<string> {
+export async function encryptAESKeyBase64(
+  rsaPem: string,
+  rawAESKey: ArrayBuffer
+): Promise<string> {
   const encryptedAESKey = await encryptAESKeyWithRSA(rsaPem, rawAESKey); // Encrypt AES key with RSA public key
   return btoa(String.fromCharCode(...new Uint8Array(encryptedAESKey))); // Convert to base64
 }
@@ -62,10 +65,22 @@ export async function encryptAESKeyWithRSA(
     false,
     ["encrypt"]
   );
+  // Ensure input is a CryptoKey
+  const aesCryptoKey = await crypto.subtle.importKey(
+    "raw",
+    rawAESKey,
+    { name: "AES-GCM" },
+    true,
+    ["encrypt"]
+  );
+
+  // Then export back to raw before encrypting with RSA
+  const aesKeyBuffer = await crypto.subtle.exportKey("raw", aesCryptoKey);
+
   return crypto.subtle.encrypt(
     { name: "RSA-OAEP" },
     importedRSAPubKey,
-    rawAESKey // Encrypt AES key
+    aesKeyBuffer
   );
 }
 
@@ -158,7 +173,10 @@ export async function generateRSAKeyPair(): Promise<{
 /**
  * Derives an AES-GCM key from a password using PBKDF2 with SHA-256 and a salt.
  */
-export async function deriveKeyFromPassword(password: string, salt: Uint8Array): Promise<CryptoKey> {
+export async function deriveKeyFromPassword(
+  password: string,
+  salt: Uint8Array
+): Promise<CryptoKey> {
   const enc = new TextEncoder();
   const passwordBytes = enc.encode(password); // Encode password
   const safeSalt = new Uint8Array(new ArrayBuffer(salt.length));
@@ -188,7 +206,10 @@ export async function deriveKeyFromPassword(password: string, salt: Uint8Array):
  * Encrypts an RSA private key with a password-derived AES key.
  * Returns the ciphertext along with IV and salt used.
  */
-export async function encryptPrivateKeyWithPassword(privateKey: CryptoKey, password: string): Promise<{
+export async function encryptPrivateKeyWithPassword(
+  privateKey: CryptoKey,
+  password: string
+): Promise<{
   cipherText: Uint8Array;
   iv: Uint8Array;
   salt: Uint8Array;

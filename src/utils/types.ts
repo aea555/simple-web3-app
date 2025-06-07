@@ -1,4 +1,4 @@
-import { Program } from "@coral-xyz/anchor";
+import { BN, Program } from "@coral-xyz/anchor";
 import { RsaStorage } from "@project/anchor";
 import { PublicKey } from "@solana/web3.js";
 
@@ -12,4 +12,13 @@ export type FileMetadata = {
 export type SolanaProgramContext = {
   program: Program<RsaStorage>;
   programId: PublicKey;
+};
+
+export type UserFile = {
+  cid: string;
+  keyCid: string;
+  uploader: PublicKey;
+  timestamp: BN;
+  isPublic: boolean;
+  pubkey: PublicKey;
 };

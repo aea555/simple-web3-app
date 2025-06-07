@@ -147,3 +147,63 @@ export async function uploadEncryptedAESKey(
   );
   return await uploadEncryptedAESKeyToIPFS(encryptedAESKeyBase64, client);
 }
+
+/**
+ * Encrypts an AES key with recipient's RSA public key and uploads it to IPFS.
+ */
+export async function encryptAndUploadSharedAESKey(
+  aesKeyRaw: ArrayBuffer,
+  recipientPublicKeyPem: string,
+  client: Awaited<ReturnType<typeof create>>
+): Promise<string> {
+  const encryptedKeyBase64 = await encryptAESKeyBase64(
+    recipientPublicKeyPem,
+    aesKeyRaw
+  );
+
+  const cid = await uploadEncryptedAESKeyToIPFS(encryptedKeyBase64, client);
+  return cid.toString();
+}
+
+/*
+  * Fetches a shared file from IPFS, decrypts the AES key using the user's private RSA key,
+  * and then decrypts the file content using that AES key.
+  */
+export async function fetchAndDecryptSharedFile(options: {
+  cid: string;
+  sharedKeyCid: string;
+  privateKey: CryptoKey;
+}): Promise<Blob> {
+  const { cid, sharedKeyCid, privateKey } = options;
+
+  const keyFile = await fetchFileBinary(CID.parse(sharedKeyCid));
+  const encryptedKeyJSON = JSON.parse(new TextDecoder().decode(keyFile));
+  const aesKeyBuffer = Uint8Array.from(
+    atob(encryptedKeyJSON.encrypted_aes_key),
+    (c) => c.charCodeAt(0)
+  ).buffer;
+
+  const aesKey = await decryptAESKey(aesKeyBuffer, privateKey);
+
+  const encryptedFile = await fetchFileBinary(CID.parse(cid));
+  const iv = encryptedFile.slice(0, 12);
+  const ciphertext = encryptedFile.slice(12);
+
+  const decrypted = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv },
+    aesKey,
+    ciphertext
+  );
+
+  return new Blob([decrypted]);
+}
+
+export async function fetchAESKeyFromKeyCid(keyCid: string): Promise<ArrayBuffer> {
+  const keyFile = await fetchFileBinary(CID.parse(keyCid));
+  const encryptedKeyJSON = JSON.parse(new TextDecoder().decode(keyFile));
+  const aesKeyBuffer = Uint8Array.from(
+    atob(encryptedKeyJSON.encrypted_aes_key),
+    (c) => c.charCodeAt(0)
+  ).buffer;
+  return aesKeyBuffer;
+}

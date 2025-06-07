@@ -6,6 +6,7 @@ import { getW3SpaceDID } from "@/utils/store";
 import { AppHero } from "@/components/ui/ui-layout";
 import toast from "react-hot-toast";
 import StorachaSetupPage from "@/components/setup/setupPage";
+import { Client } from "@web3-storage/w3up-client";
 
 const W3Context = createContext<any>(null);
 
@@ -14,7 +15,7 @@ export function useW3() {
 }
 
 export function W3Provider({ children }: { children: React.ReactNode }) {
-  const [client, setClient] = useState<any>(null);
+  const [client, setClient] = useState<Client | null>(null);
   const [space, setSpace] = useState<any>(null);
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(true);

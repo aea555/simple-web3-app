@@ -15,6 +15,7 @@ const links: { label: string; path: string }[] = [
   { label: "Clusters", path: "/clusters" },
   { label: "Upload", path: "/upload" },
   { label: "Fetch", path: "/fetch" },
+  { label: "Shared Files", path: "/shared" },
 ];
 
 export default function RootLayout({

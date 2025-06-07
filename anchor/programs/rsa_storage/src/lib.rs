@@ -34,6 +34,20 @@ pub mod rsa_storage {
         metadata.is_public = is_public;
         Ok(())
     }
+
+    pub fn share_file_access(
+        ctx: Context<ShareFileAccess>,
+        cid: String,
+        shared_key_cid: String,
+    ) -> Result<()> {
+        let shared = &mut ctx.accounts.shared_access;
+        shared.cid = cid;
+        shared.shared_key_cid = shared_key_cid;
+        shared.shared_by = ctx.accounts.sharer.key();
+        shared.shared_with = ctx.accounts.shared_with.key();
+        shared.timestamp = Clock::get()?.unix_timestamp;
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -91,9 +105,39 @@ pub struct UserRSAKey {
 
 #[account]
 pub struct FileMetadata {
-    pub cid: String,             // IPFS CID
-    pub key_cid: String,         // IPFS Aes key CID
-    pub uploader: Pubkey,        // who uploaded
-    pub timestamp: i64,          // UNIX timestamp
-    pub is_public: bool,         // access policy
+    pub cid: String,      // IPFS CID
+    pub key_cid: String,  // IPFS Aes key CID
+    pub uploader: Pubkey, // who uploaded
+    pub timestamp: i64,   // UNIX timestamp
+    pub is_public: bool,  // access policy
+}
+
+#[account]
+pub struct SharedAccess {
+    pub cid: String,
+    pub shared_key_cid: String,
+    pub shared_by: Pubkey,
+    pub shared_with: Pubkey,
+    pub timestamp: i64,
+}
+
+#[derive(Accounts)]
+#[instruction(cid: String)]
+pub struct ShareFileAccess<'info> {
+    #[account(mut)]
+    pub sharer: Signer<'info>,
+
+    /// CHECK: not dangerous; used for PDA seed
+    pub shared_with: UncheckedAccount<'info>,
+
+    #[account(
+        init,
+        seeds = [b"shared_access", &keccak::hash(cid.as_bytes()).to_bytes()[..], shared_with.key().as_ref()],
+        bump,
+        payer = sharer,
+        space = 8 + 128 + 128 + 32 + 32 + 8
+    )]
+    pub shared_access: Account<'info, SharedAccess>,
+
+    pub system_program: Program<'info, System>,
 }

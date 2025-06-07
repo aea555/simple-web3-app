@@ -29,6 +29,7 @@ export function UiLayout({ children }: { children: ReactNode }) {
     { label: 'Clusters', path: '/clusters' },
     { label: 'Upload', path: '/upload' },
     { label: 'Fetch', path: '/fetch' },
+    { label: "Shared Files", path: "/shared" },
     // Add other relevant links here if your project expands
     // { label: 'Settings', path: '/settings' },
   ];

@@ -57,6 +57,9 @@ export default function FetchPage() {
     switch (filter) {
       case 'today':
         return fileDate.toDateString() === now.toDateString();
+      case 'last3days':
+        const threeDaysAgo = new Date(now.getTime() - (3 * 24 * 60 * 60 * 1000));
+        return fileDate >= threeDaysAgo && fileDate <= new Date();
       case 'last7days':
         const sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
         return fileDate >= sevenDaysAgo && fileDate <= new Date();
@@ -232,6 +235,7 @@ export default function FetchPage() {
               >
                 <option value="all">All Time</option>
                 <option value="today">Today</option>
+                <option value="last3days">Last 3 Days</option>
                 <option value="last7days">Last 7 Days</option>
                 <option value="last30days">Last 30 Days</option>
               </select>

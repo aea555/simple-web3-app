@@ -1,31 +1,27 @@
 import { ellipsify } from "@/components/ui/ui-layout";
-import { fetchAndDecryptFile } from "@/utils/ipfs";
-import { SolanaProgramContext, UserFile } from "@/utils/types";
+import { fetchAndDecryptFile } from "@/lib/ipfs";
+import { SolanaProgramContext } from "@/lib/types"
 import { AnchorWallet } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
 import { SetStateAction } from "react";
 import { saveAs } from "file-saver";
+import toast from "react-hot-toast";
 
 type handleDecryptProps = {
   metadata: any;
-  publicKey: PublicKey | null;
-  anchorWallet: AnchorWallet | undefined;
+  wallet: AnchorWallet | undefined;
   solana: SolanaProgramContext | undefined;
   setLoading: (value: SetStateAction<boolean>) => void;
   setError: (value: SetStateAction<string | null>) => void;
-  toast: any;
 };
 
 export default async function handleDecrypt({
   metadata,
-  publicKey,
-  anchorWallet,
+  wallet,
   solana,
   setLoading,
   setError,
-  toast,
 }: handleDecryptProps) {
-  if (!publicKey || !anchorWallet || !solana) {
+  if (!wallet || !wallet.publicKey || !solana) {
     setError("Please connect your wallet first.");
     toast.error("Please connect your wallet to decrypt files.");
     return;
@@ -36,7 +32,7 @@ export default async function handleDecrypt({
   toast.loading("🔓 Decrypting file...", { id: "decryptToast" });
 
   try {
-    const blob = await fetchAndDecryptFile(metadata);
+    const blob = await fetchAndDecryptFile(metadata, wallet.publicKey.toBase58());
     const filename = `decrypted-${ellipsify(metadata.cid, 8)}.bin`;
     saveAs(blob, filename);
     toast.success("✅ File decrypted and downloaded!", {

@@ -5,7 +5,7 @@ type DecryptByCIDProps = {
   fileCidInput: string;
   setFileCidInput: (value: SetStateAction<string>) => void;
   loading: boolean;
-  publicKey: PublicKey | null;
+  publicKey: PublicKey | undefined;
   handleManualFetch(): Promise<void>;
 };
 

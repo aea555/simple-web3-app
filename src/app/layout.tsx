@@ -1,9 +1,9 @@
 import "./globals.css";
 import { ClusterProvider } from "@/components/cluster/cluster-data-access";
-import { SolanaProvider } from "@/components/solana/solana-provider";
+import { SolanaProvider } from "@/providers/solana-provider";
 import { UiLayout } from "@/components/ui/ui-layout";
 import { ReactQueryProvider } from "./react-query-provider";
-import { W3Provider } from "@/context/w3Context";
+import { W3Provider } from "@/providers/w3Context";
 
 export const metadata = {
   title: "Encrypted Storage",

@@ -1,8 +1,7 @@
-import { SolanaProgramContext, UserFile } from "@/utils/types";
-import copyToClipboard from "@/utils/ui-utils/common/copyToClipboard";
-import handleDecrypt from "@/utils/ui-utils/fetch/handleDecrypt";
+import { SolanaProgramContext, UserFile } from "@/lib/types";
+import copyToClipboard from "@/features/common/copyToClipboard";
+import handleDecrypt from "@/features/fetch/handleDecrypt";
 import { AnchorWallet } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
 import Link from "next/link";
 import { SetStateAction } from "react";
 
@@ -15,11 +14,9 @@ type ListFilesProps = {
   setSortOrder: (value: SetStateAction<"asc" | "desc">) => void;
   loading: boolean;
   userFiles: UserFile[];
-  publicKey: PublicKey | null;
   sortedAndFilteredFiles: UserFile[];
   handleShare(file: UserFile): Promise<void>;
-  toast: any;
-  anchorWallet: AnchorWallet | undefined;
+  wallet: AnchorWallet | undefined;
   solana: SolanaProgramContext | undefined;
   setError: (value: SetStateAction<string | null>) => void;
   setLoading: (value: SetStateAction<boolean>) => void;
@@ -34,11 +31,9 @@ export default function ListFiles({
   setSortOrder,
   loading,
   userFiles,
-  publicKey,
   sortedAndFilteredFiles,
   handleShare,
-  toast,
-  anchorWallet,
+  wallet,
   solana,
   setError,
   setLoading
@@ -142,7 +137,7 @@ export default function ListFiles({
             </p>
           </div>
         )}
-        {!loading && userFiles.length === 0 && publicKey && (
+        {!loading && userFiles.length === 0 && wallet?.publicKey && (
           <p className="text-gray-600 dark:text-gray-400 text-center py-4">
             No files uploaded yet. Go to the{" "}
             <Link href="/upload" className="text-violet-600 hover:underline">
@@ -151,13 +146,13 @@ export default function ListFiles({
             to get started!
           </p>
         )}
-        {!loading && !publicKey && (
+        {!loading && !wallet?.publicKey && (
           <p className="text-gray-600 dark:text-gray-400 text-center py-4">
             Connect your wallet to see your uploaded files.
           </p>
         )}
         {!loading &&
-          publicKey &&
+          wallet?.publicKey &&
           sortedAndFilteredFiles.length === 0 &&
           userFiles.length > 0 && (
             <p className="text-gray-600 dark:text-gray-400 text-center py-4">
@@ -177,7 +172,7 @@ export default function ListFiles({
                     {file.cid}
                   </span>
                   <button
-                    onClick={() => copyToClipboard({text: file.cid, toast})}
+                    onClick={() => copyToClipboard({text: file.cid})}
                     className="ml-2 px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-md transition duration-200"
                     aria-label="Copy CID"
                   >
@@ -190,7 +185,7 @@ export default function ListFiles({
                 </p>
               </div>
               <button
-                onClick={() => handleDecrypt({metadata: file, publicKey, anchorWallet, solana, setLoading, setError, toast})}
+                onClick={() => handleDecrypt({metadata: file, wallet, solana, setLoading, setError})}
                 className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg text-sm shadow-md transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75"
                 disabled={loading}
               >

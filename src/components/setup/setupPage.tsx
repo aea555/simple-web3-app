@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 import { AppHero } from "@/components/ui/ui-layout";
 import { create } from "@web3-storage/w3up-client";
 import { StoreIndexedDB } from "@web3-storage/w3up-client/stores/indexeddb";
-import { storeW3SpaceDID } from "@/utils/store";
+import { storeW3SpaceDID } from "@/lib/store";
 
 export default function StorachaSetupPage() {
   const [email, setEmail] = useState("");

@@ -3,11 +3,8 @@ import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { RsaStorage } from "@project/anchor";
 import { keccak_256 } from "js-sha3";
 import { hexToBytes } from "@noble/hashes/utils";
-import { CID } from "multiformats";
-import { encryptAESKeyBase64 } from "./cryptography";
 import {
   encryptAndUploadSharedAESKey,
-  uploadEncryptedAESKeyToIPFS,
 } from "./ipfs";
 import { create } from "@web3-storage/w3up-client";
 

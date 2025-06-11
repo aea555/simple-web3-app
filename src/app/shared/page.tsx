@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { useAnchorWallet } from "@solana/wallet-adapter-react";
+import { AnchorWallet, useAnchorWallet } from "@solana/wallet-adapter-react";
 import { useSolanaProgram } from "@/hooks/useSolanaProgram";
-import { listSharedFiles } from "@/utils/chain";
-import { fetchAndDecryptSharedFile } from "@/utils/ipfs";
-import { promptAndLoadPrivateKey } from "@/utils/store";
+import { listSharedFiles } from "@/lib/chain";
+import { fetchAndDecryptSharedFile } from "@/lib/ipfs";
+import { promptAndLoadPrivateKey } from "@/lib/store";
 import { AppHero } from "@/components/ui/ui-layout";
 
 export default function SharedFilesPage() {
@@ -32,10 +32,15 @@ export default function SharedFilesPage() {
     })();
   }, [program, wallet]);
 
-  async function handleDecrypt(file: any) {
+  async function handleDecrypt(file: any, wallet: AnchorWallet | undefined) {
     const toastId = toast.loading("Decrypting file...");
+    if (!wallet) {
+      toast.error("Wallet not connected");
+      return;
+    }
+    
     try {
-      const { privateKey } = await promptAndLoadPrivateKey();
+      const { privateKey } = await promptAndLoadPrivateKey(wallet.publicKey.toBase58());
       const blob = await fetchAndDecryptSharedFile({
         cid: file.cid,
         sharedKeyCid: file.sharedKeyCid,
@@ -54,9 +59,6 @@ export default function SharedFilesPage() {
       toast.error("❌ Failed to decrypt file: " + (err.message || err.toString()), {
         id: toastId,
       });
-    } finally {
-      // Ensure the loading toast is cleared even if toast.success doesn't remove it
-      toast.dismiss(toastId);
     }
   }  
   
@@ -84,7 +86,7 @@ export default function SharedFilesPage() {
                     <strong>CID:</strong> {file.cid}
                   </div>
                   <button
-                    onClick={() => handleDecrypt(file)}
+                    onClick={() => handleDecrypt(file, wallet)}
                     className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-md transition"
                   >
                     🔓 Decrypt & Download

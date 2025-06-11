@@ -1,38 +1,34 @@
 import { AnchorWallet } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
 import { SetStateAction } from "react";
-import { SolanaProgramContext } from "../../types";
+import { SolanaProgramContext } from "@/lib/types"
 import {
   hasEncryptedPrivateKey,
   promptPassword,
   storeEncryptedPrivateKey,
-} from "../../store";
+} from "@/lib/store";
 import {
   encryptPrivateKeyWithPassword,
   generateRSAKeyPair,
-} from "../../cryptography";
-import { registerRSAKeyOnChain } from "../../chain";
+} from "@/lib/cryptography"
+import { registerRSAKeyOnChain } from "@/lib/chain"
+import toast from "react-hot-toast";
 
 type handleRegisterRsaKeyProps = {
-  publicKey: PublicKey | null;
-  anchorWallet: AnchorWallet | undefined;
+  wallet: AnchorWallet | undefined;
   setError: (value: SetStateAction<string | null>) => void;
   setLoading: (value: SetStateAction<boolean>) => void;
-  toast: any;
   solana: SolanaProgramContext | undefined;
   setHasPrivateKey: (value: SetStateAction<boolean>) => void;
 };
 
 export default async function handleRegisterRsaKey({
-  publicKey,
-  anchorWallet,
+  wallet,
   setError,
   setLoading,
-  toast,
   solana,
   setHasPrivateKey
 }: handleRegisterRsaKeyProps) {
-  if (!publicKey || !anchorWallet) {
+  if (!wallet || !wallet.publicKey) {
     setError("Please connect your wallet first.");
     toast.error("Please connect your wallet to register an RSA key.");
     return;
@@ -54,7 +50,7 @@ export default async function handleRegisterRsaKey({
   const { program } = solana;
 
   try {
-    const alreadyStored = await hasEncryptedPrivateKey();
+    const alreadyStored = await hasEncryptedPrivateKey(wallet.publicKey.toBase58());
     if (alreadyStored) {
       toast.success("🔐 RSA private key already exists in your browser.", {
         id: "rsaKeyToast",
@@ -82,10 +78,10 @@ export default async function handleRegisterRsaKey({
       password
     );
 
-    await storeEncryptedPrivateKey(cipherText, iv, salt);
+    await storeEncryptedPrivateKey(wallet.publicKey.toBase58(), cipherText, iv, salt);
     setHasPrivateKey(true);
 
-    const tx = await registerRSAKeyOnChain(publicKey, publicKeyPem, program);
+    const tx = await registerRSAKeyOnChain(wallet.publicKey, publicKeyPem, program);
     console.log("RSA key stored! Tx:", tx);
     toast.success("✅ RSA key registered successfully!", {
       id: "rsaKeyToast",

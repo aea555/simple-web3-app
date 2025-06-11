@@ -1,11 +1,20 @@
 import { PublicKey } from "@solana/web3.js";
 import { ellipsify } from "../ui/ui-layout";
+import toast from "react-hot-toast";
 
 type WalletStatusProps = {
-  publicKey: PublicKey | null;
+  publicKey: PublicKey | undefined;
 };
 
 export default function WalletStatus({ publicKey }: WalletStatusProps) {
+  if (!publicKey) {
+    toast.error("❗ Please connect your wallet.", {
+      id: "wallet-warning", 
+    });
+    return;
+  } else {
+    toast.dismiss("wallet-warning");
+  }
   return (
     <>
       {/* Wallet Connection Status */}

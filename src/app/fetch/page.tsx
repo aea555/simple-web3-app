@@ -1,34 +1,33 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useWallet, useAnchorWallet } from "@solana/wallet-adapter-react";
+import { useState } from "react";
+import { useAnchorWallet } from "@solana/wallet-adapter-react";
 import {
   fetchFileMetadataByCID,
   shareFileWithUser,
   getRSAKeyByPubkey,
-} from "@/utils/chain";
-import { fetchAESKeyFromKeyCid, fetchAndDecryptFile } from "@/utils/ipfs";
-import { saveAs } from "file-saver";
+} from "@/lib/chain";
+import { fetchAESKeyFromKeyCid } from "@/lib/ipfs";
 import { useSolanaProgram } from "@/hooks/useSolanaProgram";
-import { ellipsify } from "@/components/ui/ui-layout";
 import toast from "react-hot-toast";
-import { UserFile } from "@/utils/types";
-import { useW3 } from "@/context/w3Context";
+import { UserFile } from "@/lib/types";
+import { useW3 } from "@/providers/w3Context";
 import { PublicKey } from "@solana/web3.js";
 import Hero from "@/components/ui/Hero";
-import WalletStatus from "@/components/account/WalletStatus";
+import WalletStatus from "@/components/ui/WalletStatus";
 import DecryptByCID from "@/components/fetch/DecryptByCID";
 import ListFiles from "@/components/fetch/ListFiles";
-import GlobalErrorDisplay from "@/components/error/globalErrorDisplay";
+import GlobalErrorDisplay from "@/components/ui/globalErrorDisplay";
 import GlobalModal from "@/components/ui/GlobalModal";
-import fetchUseEffect from "@/utils/ui-utils/fetch/fetchUseEffect";
-import fileMemo from "@/utils/ui-utils/fetch/fileMemo";
-import { decryptAESKey } from "@/utils/cryptography";
-import { promptAndLoadPrivateKey } from "@/utils/store";
+import fetchUseEffect from "@/features/fetch/fetchUseEffect";
+import fileMemo from "@/features/fetch/fileMemo";
+import { decryptAESKey } from "@/lib/cryptography";
+import { promptAndLoadPrivateKey } from "@/lib/store";
+import handleDecrypt from "@/features/fetch/handleDecrypt";
+import { useWalletConnectionWarning } from "@/hooks/useWalletConnectionWarning";
 
 export default function FetchPage() {
-  const { publicKey } = useWallet();
-  const anchorWallet = useAnchorWallet();
+  const wallet = useAnchorWallet();
   const [fileCidInput, setFileCidInput] = useState("");
   const [userFiles, setUserFiles] = useState<UserFile[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -40,16 +39,14 @@ export default function FetchPage() {
   const [selectedFile, setSelectedFile] = useState<any | null>(null);
   const [recipientAddress, setRecipientAddress] = useState("");
   const { client } = useW3();
-  const solana = useSolanaProgram(anchorWallet);
+  const solana = useSolanaProgram(wallet);
 
   fetchUseEffect({
-    publicKey,
-    anchorWallet,
+    wallet,
     solana,
     setUserFiles,
     setLoading,
     setError,
-    toast,
   });
 
   // Memoized and sorted files array based on filters and sort options
@@ -60,44 +57,13 @@ export default function FetchPage() {
     sortOrder,
   });
 
-  async function handleDecrypt(metadata: any) {
-    if (!publicKey || !anchorWallet || !solana) {
-      setError("Please connect your wallet first.");
-      toast.error("Please connect your wallet to decrypt files.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    toast.loading("🔓 Decrypting file...", { id: "decryptToast" });
-
-    try {
-      const blob = await fetchAndDecryptFile(metadata);
-      const filename = `decrypted-${ellipsify(metadata.cid, 8)}.bin`;
-      saveAs(blob, filename);
-      toast.success("✅ File decrypted and downloaded!", {
-        id: "decryptToast",
-      });
-    } catch (err: any) {
-      console.error("Decryption failed:", err);
-      setError(
-        "❌ Failed to decrypt file: " + (err.message || "Unknown error")
-      );
-      toast.error("❌ Decryption failed: " + (err.message || "Unknown error"), {
-        id: "decryptToast",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function handleManualFetch() {
     if (!fileCidInput.trim()) {
       setError("Please enter a file CID.");
       toast.error("Please enter a file CID.");
       return;
     }
-    if (!publicKey || !anchorWallet) {
+    if (!wallet || !wallet.publicKey) {
       setError("Please connect your wallet first.");
       toast.error("Please connect your wallet to fetch files.");
       return;
@@ -121,7 +87,7 @@ export default function FetchPage() {
       toast.success("Metadata fetched. Proceeding to decrypt...", {
         id: "fetchMetadataToast",
       });
-      await handleDecrypt(metadata);
+      await handleDecrypt({metadata, wallet, solana, setLoading, setError});
       setFileCidInput("");
     } catch (err: any) {
       console.error("Manual fetch failed:", err);
@@ -143,7 +109,7 @@ export default function FetchPage() {
   }
 
   async function submitShare() {
-    if (!solana || !anchorWallet || !selectedFile || !recipientAddress) return;
+    if (!solana || !wallet || !selectedFile || !recipientAddress) return;
     try {
       const aesKey = await fetchAESKeyFromKeyCid(selectedFile.keyCid);
       const recipientPubkey = new PublicKey(recipientAddress);
@@ -157,12 +123,12 @@ export default function FetchPage() {
       if (!recipientRsaKey) {
         throw new Error("Recipient does not have an RSA key registered.");
       }
-      const { privateKey } = await promptAndLoadPrivateKey(); 
+      const { privateKey } = await promptAndLoadPrivateKey(wallet.publicKey.toBase58()); 
       const decryptedAesKey = await decryptAESKey(aesKey, privateKey);
       const raw = await crypto.subtle.exportKey("raw", decryptedAesKey);
       await shareFileWithUser({
         program: solana.program,
-        sharer: anchorWallet,
+        sharer: wallet,
         fileCid: selectedFile.cid,
         aesKeyRaw: raw,
         recipientPubkey: recipientAddress,
@@ -201,14 +167,14 @@ export default function FetchPage() {
         {/* Main Content for Decrypt by CID */}
         <div className="flex-1 lg:w-1/2 w-full max-w-2xl p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg space-y-6 mx-auto lg:mx-0 flex flex-col justify-center">
           {/* Wallet Connection Status */}
-          <WalletStatus publicKey={publicKey} />
+          <WalletStatus publicKey={wallet?.publicKey} />
 
           {/* Decrypt by CID Section */}
           <DecryptByCID
             fileCidInput={fileCidInput}
             setFileCidInput={setFileCidInput}
             loading={loading}
-            publicKey={publicKey}
+            publicKey={wallet?.publicKey}
             handleManualFetch={handleManualFetch}
           />
         </div>
@@ -224,11 +190,9 @@ export default function FetchPage() {
         setSortOrder={setSortOrder}
         loading={loading}
         userFiles={userFiles}
-        publicKey={publicKey}
         sortedAndFilteredFiles={sortedAndFilteredFiles}
         handleShare={handleShare}
-        toast={toast}
-        anchorWallet={anchorWallet}
+        wallet={wallet}
         solana={solana}
         setError={setError}
         setLoading={setLoading}
@@ -251,7 +215,5 @@ export default function FetchPage() {
     </div>
   );
 }
-function importRsaPrivateKey(myRsaPrivateKeyPem: any) {
-  throw new Error("Function not implemented.");
-}
+
 

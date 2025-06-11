@@ -2,14 +2,23 @@ import { PublicKey } from "@solana/web3.js";
 
 type KeyManagementProps = {
   loading: boolean;
-  publicKey: PublicKey | null;
+  publicKey: PublicKey | undefined;
   hasPrivateKey: boolean;
   handleRegisterRsaKey(): Promise<void>;
-  handleImportWrapper: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
+  handleImportWrapper: (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => Promise<void>;
   handlePrivateKeyDownload(): Promise<void>;
 };
 
-export default function RsaKeyManagement({hasPrivateKey, publicKey, loading, handleRegisterRsaKey, handleImportWrapper, handlePrivateKeyDownload}: KeyManagementProps) {
+export default function RsaKeyManagement({
+  hasPrivateKey,
+  publicKey,
+  loading,
+  handleRegisterRsaKey,
+  handleImportWrapper,
+  handlePrivateKeyDownload,
+}: KeyManagementProps) {
   return (
     <>
       {/* RSA Key Management Section */}

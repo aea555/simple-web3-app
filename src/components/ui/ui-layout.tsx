@@ -8,7 +8,7 @@ import toast, { Toaster } from 'react-hot-toast'
 
 import { AccountChecker } from '../account/account-ui' // Assuming this path is correct
 import { ClusterChecker, ClusterUiSelect, ExplorerLink } from '../cluster/cluster-ui' // Assuming this path is correct
-import { WalletButton } from '../solana/solana-provider' // Assuming this path is correct
+import { WalletButton } from '@/providers/solana-provider'
 
 /**
  * UiLayout Component

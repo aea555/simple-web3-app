@@ -1,41 +1,38 @@
 "use client";
 
-import { useState } from "react";
-import { useWallet, useAnchorWallet } from "@solana/wallet-adapter-react";
-
+import { useEffect, useState } from "react";
+import { useAnchorWallet } from "@solana/wallet-adapter-react";
 import { CID } from "multiformats/cid";
-import {
-  hasEncryptedPrivateKey,
-} from "@/utils/store";
 import { useSolanaProgram } from "@/hooks/useSolanaProgram";
-import toast from "react-hot-toast"; // Import toast for notifications
-import { useW3 } from "@/context/w3Context";
-import GlobalErrorDisplay from "@/components/error/globalErrorDisplay";
+import { useW3 } from "@/providers/w3Context";
+import GlobalErrorDisplay from "@/components/ui/globalErrorDisplay";
 import FileUpload from "@/components/upload/FileUpload";
 import RsaKeyManagement from "@/components/keymanagement/RsaKeyManagement";
-import WalletStatus from "@/components/account/WalletStatus";
+import WalletStatus from "@/components/ui/WalletStatus";
 import Hero from "@/components/ui/Hero";
-import handleRegisterRsaKey from "@/utils/ui-utils/upload/handleRegisterRsaKey";
-import handleUpload from "@/utils/ui-utils/upload/handleUpload";
-import handlePrivateKeyDownload from "@/utils/ui-utils/upload/handlePrivateKeyDownload";
-import handleImportWrapper from "@/utils/ui-utils/common/handleImportWrapper";
-import uploadUseEffect from "@/utils/ui-utils/upload/uploadUseEffect";
+import handleRegisterRsaKey from "@/features/upload/handleRegisterRsaKey";
+import handleUpload from "@/features/upload/handleUpload";
+import handlePrivateKeyDownload from "@/features/upload/handlePrivateKeyDownload";
+import handleImportWrapper from "@/features/common/handleImportWrapper";
+import { hasEncryptedPrivateKey } from "@/lib/store";
 
 export default function UploadPage() {
-  const { publicKey } = useWallet();
-  const anchorWallet = useAnchorWallet();
+  const wallet = useAnchorWallet();
   const [file, setFile] = useState<File | null>(null);
   const [cid, setCid] = useState<CID | null>(null);
   const [loading, setLoading] = useState<boolean>(false); // Unified loading state
   const [error, setError] = useState<string | null>(null);
   const [hasPrivateKey, setHasPrivateKey] = useState<boolean>(false);
-  const solana = useSolanaProgram(anchorWallet);
+  const solana = useSolanaProgram(wallet);
   const { client } = useW3();
 
-  uploadUseEffect({ hasEncryptedPrivateKey, setHasPrivateKey });
+  useEffect(() => {
+    if (!wallet?.publicKey) return;
+  
+    hasEncryptedPrivateKey(wallet.publicKey.toBase58()).then(setHasPrivateKey);
+  }, [wallet?.publicKey?.toBase58()]);
 
   return (
-    // Main container with full width, centered content, and responsive padding
     <div className="flex flex-col items-center min-h-screen-minus-nav px-4 sm:px-6 lg:px-8">
       {/* Top Section: Left and Right Columns for AppHero and Main Content */}
       <div className="flex flex-col lg:flex-row justify-center w-full max-w-7xl mx-auto pt-8 pb-6 items-stretch">
@@ -46,11 +43,11 @@ export default function UploadPage() {
 
         {/* Right Column: Main Content (Wallet Status, RSA Key Management, File Upload) */}
         <div className="flex-1 lg:w-1/2 w-full max-w-2xl p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg space-y-6 mx-auto lg:mx-0 flex flex-col justify-center">
-          <WalletStatus publicKey={publicKey} />
+          <WalletStatus publicKey={wallet?.publicKey} />
 
           <RsaKeyManagement
             loading={loading}
-            publicKey={publicKey}
+            publicKey={wallet?.publicKey}
             hasPrivateKey={hasPrivateKey}
             handleImportWrapper={(e) =>
               handleImportWrapper({
@@ -58,19 +55,17 @@ export default function UploadPage() {
                 setLoading,
                 setError,
                 setHasPrivateKey,
-                toast,
+                walletAddress: wallet?.publicKey.toBase58(),
               })
             }
             handlePrivateKeyDownload={() =>
-              handlePrivateKeyDownload({ setLoading, setError, toast })
+              handlePrivateKeyDownload({ setLoading, setError, walletAddress: wallet?.publicKey.toBase58(),})
             }
             handleRegisterRsaKey={() =>
               handleRegisterRsaKey({
-                publicKey,
-                anchorWallet,
+                wallet,
                 setError,
                 setLoading,
-                toast,
                 solana,
                 setHasPrivateKey,
               })
@@ -81,11 +76,9 @@ export default function UploadPage() {
             setFile={setFile}
             handleUpload={() =>
               handleUpload({
-                publicKey,
-                anchorWallet,
+                anchorWallet: wallet,
                 setError,
                 setLoading,
-                toast,
                 solana,
                 file,
                 setCid,
@@ -94,9 +87,9 @@ export default function UploadPage() {
             }
             file={file}
             loading={loading}
-            publicKey={publicKey}
             hasPrivateKey={hasPrivateKey}
             cid={cid}
+            publicKey={wallet?.publicKey}
           />
 
           <GlobalErrorDisplay error={error} />

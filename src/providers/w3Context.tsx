@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, createContext, useContext } from "react";
-import { getPersistentW3Client } from "@/utils/web3client";
-import { getW3SpaceDID } from "@/utils/store";
+import { getPersistentW3Client } from "@/lib/web3client";
+import { getW3SpaceDID } from "@/lib/store";
 import { AppHero } from "@/components/ui/ui-layout";
 import toast from "react-hot-toast";
 import StorachaSetupPage from "@/components/setup/setupPage";

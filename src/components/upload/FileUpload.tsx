@@ -7,7 +7,7 @@ type FileUploadProps = {
   handleUpload(): Promise<void>;
   file: File | null;
   loading: boolean;
-  publicKey: PublicKey | null;
+  publicKey: PublicKey | undefined;
   hasPrivateKey: boolean;
   cid: CID<unknown, number, number, Version> | null;
 };

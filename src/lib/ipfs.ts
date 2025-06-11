@@ -75,10 +75,11 @@ export async function fetchFileBinary(cid: CID): Promise<Uint8Array> {
  * Fetch encrypted data + AES key from IPFS and decrypt both.
  */
 export async function fetchAndDecryptFile(
-  fileMeta: FileMetadata
+  fileMeta: FileMetadata,
+  walletAddress: string,
 ): Promise<Blob> {
   // 1. Load user's private RSA key
-  const { privateKey } = await promptAndLoadPrivateKey();
+  const { privateKey } = await promptAndLoadPrivateKey(walletAddress);
   if (!privateKey) throw new Error("Invalid password or corrupted key data.");
 
   // 2. Fetch encrypted AES key JSON from IPFS

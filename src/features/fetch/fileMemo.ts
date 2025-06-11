@@ -1,4 +1,4 @@
-import { UserFile } from "@/utils/types";
+import { UserFile } from "@/lib/types";
 import { useMemo } from "react";
 import isWithinTimeRange from "../common/isWithinTimeRange";
 

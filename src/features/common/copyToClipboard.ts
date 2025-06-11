@@ -1,9 +1,10 @@
+import toast from "react-hot-toast";
+
 type copyToClipboardProps = {
   text: string;
-  toast: any;
 };
 
-export default function copyToClipboard ({text, toast}: copyToClipboardProps) {
+export default function copyToClipboard ({text}: copyToClipboardProps) {
   navigator.clipboard
     .writeText(text)
     .then(() => {

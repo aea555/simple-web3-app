@@ -1,20 +1,18 @@
 import { ellipsify } from "@/components/ui/ui-layout";
-import { fetchRSAKey, generateAESKey } from "../../cryptography";
-import { uploadEncryptedAESKey, uploadFile } from "../../ipfs";
-import { storeFileMetadata } from "../../chain";
+import { fetchRSAKey, generateAESKey } from "@/lib/cryptography";
+import { uploadEncryptedAESKey, uploadFile } from "@/lib/ipfs";
+import { storeFileMetadata } from "@/lib/chain";
 import { AnchorWallet } from "@solana/wallet-adapter-react";
 import { SetStateAction } from "react";
 import { CID, Version } from "multiformats";
-import { SolanaProgramContext } from "../../types";
-import { PublicKey } from "@solana/web3.js";
+import { SolanaProgramContext } from "@/lib/types";
 import { Client } from "@web3-storage/w3up-client";
+import toast from "react-hot-toast";
 
 type handleUploadProps = {
-  publicKey: PublicKey | null;
   anchorWallet: AnchorWallet | undefined;
   setError: (value: SetStateAction<string | null>) => void;
   setLoading: (value: SetStateAction<boolean>) => void;
-  toast: any;
   solana: SolanaProgramContext | undefined;
   file: File | null;
   setCid: (
@@ -24,11 +22,9 @@ type handleUploadProps = {
 };
 
 export default async function handleUpload({
-  publicKey,
   anchorWallet,
   setError,
   setLoading,
-  toast,
   solana,
   file,
   setCid,
@@ -39,7 +35,7 @@ export default async function handleUpload({
     toast.error("Please select a file to upload.");
     return;
   }
-  if (!publicKey || !anchorWallet) {
+  if (!anchorWallet || !anchorWallet.publicKey) {
     setError("Please connect your wallet first.");
     toast.error("Please connect your wallet to upload files.");
     return;
@@ -64,7 +60,7 @@ export default async function handleUpload({
     toast.loading("Fetching RSA key from blockchain...", {
       id: "uploadToast",
     });
-    const rsaKey = await fetchRSAKey(publicKey, programId, program);
+    const rsaKey = await fetchRSAKey(anchorWallet.publicKey, programId, program);
     if (!rsaKey) {
       setError("RSA key not found. Please register your RSA key first.");
       toast.error("RSA key not found. Please register your RSA key first.", {
@@ -105,7 +101,7 @@ export default async function handleUpload({
       program,
       fileCid.toString(),
       keyCid,
-      publicKey,
+      anchorWallet.publicKey,
       programId
     );
     toast.success("✅ Upload complete! Metadata stored on-chain.", {

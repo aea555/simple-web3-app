@@ -1,15 +1,20 @@
-import { handlePrivateKeyImport } from "@/utils/helpers";
+import { handlePrivateKeyImport } from "@/lib/helpers";
 import { Dispatch, SetStateAction } from "react";
+import toast from "react-hot-toast";
 
 type handleImportWrapperProps = {
   e: React.ChangeEvent<HTMLInputElement>;
   setLoading: (value: SetStateAction<boolean>) => void;
   setError: (value: SetStateAction<string | null>) => void;
   setHasPrivateKey: Dispatch<SetStateAction<boolean>>;
-  toast: any;
+  walletAddress: string | undefined;
 };
 
-export default async function ({e, setLoading, setError, setHasPrivateKey, toast}: handleImportWrapperProps) {
+export default async function ({e, setLoading, setError, setHasPrivateKey, walletAddress}: handleImportWrapperProps) {
+  if (!walletAddress) {
+    toast.error("Wallet not connected");
+    return;
+  }
   setLoading(true);
   setError(null);
   toast.loading("Importing RSA private key...", { id: "importKeyToast" });
@@ -18,7 +23,8 @@ export default async function ({e, setLoading, setError, setHasPrivateKey, toast
       e,
       setHasPrivateKey,
       (msg) => toast.success(msg, { id: "importKeyToast" }),
-      (msg) => toast.error(msg, { id: "importKeyToast" })
+      (msg) => toast.error(msg, { id: "importKeyToast" }),
+      walletAddress
     );
   } catch (err: any) {
     console.error(err);

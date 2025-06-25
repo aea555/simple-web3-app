@@ -8,6 +8,36 @@
   },
   "instructions": [
     {
+      "name": "delete_file_metadata",
+      "discriminator": [
+        64,
+        81,
+        242,
+        142,
+        56,
+        130,
+        204,
+        37
+      ],
+      "accounts": [
+        {
+          "name": "file_metadata",
+          "writable": true
+        },
+        {
+          "name": "uploader",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "cid",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "get_rsa_key",
       "discriminator": [
         221,

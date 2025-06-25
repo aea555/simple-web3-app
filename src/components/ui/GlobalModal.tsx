@@ -1,14 +1,15 @@
 import { SetStateAction } from "react";
 
-type GlobalModalProps = {
+export type GlobalModalProps = {
   showModal: boolean;
   setShowModal: (value: SetStateAction<boolean>) => void;
   title: string;
-  inputPlaceholder: string;
-  inputValueString: string;
+  inputPlaceholder?: string;
+  inputValueString?: string;
   setInputValString: (value: SetStateAction<string>) => void;
   submitFunc(): Promise<void>;
   submitButtonText: string;
+  inputDisabled?: boolean;
 };
 
 export default function GlobalModal({
@@ -20,6 +21,7 @@ export default function GlobalModal({
   setInputValString,
   submitFunc,
   submitButtonText,
+  inputDisabled = false,
 }: GlobalModalProps) {
   return (
     <>
@@ -35,6 +37,7 @@ export default function GlobalModal({
               placeholder={inputPlaceholder}
               value={inputValueString}
               onChange={(e) => setInputValString(e.target.value)}
+              disabled={inputDisabled}
             />
             <div className="flex justify-end space-x-2">
               <button

@@ -1,7 +1,8 @@
+import { useEffect } from "react";
 import { fetchUserFiles } from "@/lib/chain";
 import { SolanaProgramContext, UserFile } from "@/lib/types";
 import { AnchorWallet } from "@solana/wallet-adapter-react";
-import { SetStateAction, useEffect } from "react";
+import { SetStateAction } from "react";
 import toast from "react-hot-toast";
 
 type fetchUseEffectProps = {
@@ -20,13 +21,9 @@ export default function fetchUseEffect({
   setError,
 }: fetchUseEffectProps) {
   useEffect(() => {
-    const loadUserFiles = async () => {
-      if (!wallet?.publicKey || !solana) {
-        setUserFiles([]);
-        toast.error("Wallet not connected or Solana program unavailable");
-        return;
-      }
+    if (!wallet?.publicKey || !solana) return;
 
+    const loadUserFiles = async () => {
       setLoading(true);
       setError(null);
       try {
@@ -43,5 +40,15 @@ export default function fetchUseEffect({
 
     loadUserFiles();
   }, [wallet?.publicKey?.toBase58(), solana]);
-}
 
+  // Secondary effect to show toast after 10 seconds if not initialized
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (!wallet?.publicKey || !solana) {
+        toast.error("Wallet not connected or Solana program unavailable");
+      }
+    }, 10000); // 10 seconds
+
+    return () => clearTimeout(timeout);
+  }, [wallet?.publicKey?.toBase58(), solana]);
+}

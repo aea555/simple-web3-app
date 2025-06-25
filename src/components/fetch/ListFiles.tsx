@@ -3,7 +3,8 @@ import copyToClipboard from "@/features/common/copyToClipboard";
 import handleDecrypt from "@/features/fetch/handleDecrypt";
 import { AnchorWallet } from "@solana/wallet-adapter-react";
 import Link from "next/link";
-import { SetStateAction } from "react";
+import { Dispatch, SetStateAction } from "react";
+import { GlobalModalProps } from "../ui/GlobalModal";
 
 type ListFilesProps = {
   timeFilter: string;
@@ -20,6 +21,12 @@ type ListFilesProps = {
   solana: SolanaProgramContext | undefined;
   setError: (value: SetStateAction<string | null>) => void;
   setLoading: (value: SetStateAction<boolean>) => void;
+  selectedCids: string[];
+  setSelectedCids: Dispatch<SetStateAction<string[]>>;
+  setSelectedSingleCid: Dispatch<SetStateAction<string | null>>;
+  handleDelete: (cid: string) => Promise<void>;
+  setShowModal?: Dispatch<SetStateAction<boolean>>;
+  setShowModal2?: Dispatch<SetStateAction<boolean>>;
 };
 
 export default function ListFiles({
@@ -36,7 +43,13 @@ export default function ListFiles({
   wallet,
   solana,
   setError,
-  setLoading
+  setLoading,
+  selectedCids,
+  setSelectedCids,
+  setSelectedSingleCid,
+  handleDelete,
+  setShowModal,
+  setShowModal2,
 }: ListFilesProps) {
   return (
     <>
@@ -129,6 +142,19 @@ export default function ListFiles({
           </div>
         </div>
 
+        <div className="flex flex-col sm:flex-row justify-between items-center mb-4 space-y-3 sm:space-y-0">
+          <div className="flex items-center space-x-4">
+            {selectedCids.length > 0 && (
+              <button
+                onClick={() => setShowModal && setShowModal(true)}
+                className="mt-4 px-4 py-2 bg-red-600 text-white rounded shadow hover:bg-red-700 transition"
+              >
+                🗑 Delete Selected ({selectedCids.length})
+              </button>
+            )}
+          </div>
+        </div>
+
         {loading && (
           <div className="text-center py-4">
             <span className="loading loading-spinner loading-md text-violet-600"></span>
@@ -165,6 +191,20 @@ export default function ListFiles({
               key={file.pubkey.toBase58()}
               className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700"
             >
+              <input
+                type="checkbox"
+                checked={selectedCids.includes(file.cid)}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setSelectedCids((prev) => [...prev, file.cid]);
+                  } else {
+                    setSelectedCids((prev) =>
+                      prev.filter((id) => id !== file.cid)
+                    );
+                  }
+                }}
+                className="mr-2"
+              />
               <div className="flex-1 mb-2 sm:mb-0">
                 <p className="text-sm font-medium text-gray-900 dark:text-gray-100 break-all">
                   CID:{" "}
@@ -172,7 +212,7 @@ export default function ListFiles({
                     {file.cid}
                   </span>
                   <button
-                    onClick={() => copyToClipboard({text: file.cid})}
+                    onClick={() => copyToClipboard({ text: file.cid })}
                     className="ml-2 px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-md transition duration-200"
                     aria-label="Copy CID"
                   >
@@ -185,7 +225,15 @@ export default function ListFiles({
                 </p>
               </div>
               <button
-                onClick={() => handleDecrypt({metadata: file, wallet, solana, setLoading, setError})}
+                onClick={() =>
+                  handleDecrypt({
+                    metadata: file,
+                    wallet,
+                    solana,
+                    setLoading,
+                    setError,
+                  })
+                }
                 className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg text-sm shadow-md transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75"
                 disabled={loading}
               >
@@ -204,6 +252,16 @@ export default function ListFiles({
                 disabled={loading}
               >
                 Share
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedSingleCid(file.cid);
+                  setShowModal2 && setShowModal2(true);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg text-sm shadow-md transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-75 ml-2"
+                disabled={loading}
+              >
+                Delete
               </button>
             </div>
           ))}

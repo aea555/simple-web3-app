@@ -48,6 +48,10 @@ pub mod rsa_storage {
         shared.timestamp = Clock::get()?.unix_timestamp;
         Ok(())
     }
+
+    pub fn delete_file_metadata(ctx: Context<DeleteFileMetadata>, cid: String) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -140,4 +144,20 @@ pub struct ShareFileAccess<'info> {
     pub shared_access: Account<'info, SharedAccess>,
 
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(cid: String)]
+pub struct DeleteFileMetadata<'info> {
+    #[account(
+        mut,
+        close = uploader,
+        seeds = [b"file_metadata", &keccak::hash(cid.as_bytes()).to_bytes()[..]],
+        bump,
+        constraint = file_metadata.uploader == uploader.key()
+    )]
+    pub file_metadata: Account<'info, FileMetadata>,
+
+    #[account(mut)]
+    pub uploader: Signer<'info>,
 }

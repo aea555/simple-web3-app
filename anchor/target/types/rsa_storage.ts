@@ -14,6 +14,36 @@ export type RsaStorage = {
   },
   "instructions": [
     {
+      "name": "deleteFileMetadata",
+      "discriminator": [
+        64,
+        81,
+        242,
+        142,
+        56,
+        130,
+        204,
+        37
+      ],
+      "accounts": [
+        {
+          "name": "fileMetadata",
+          "writable": true
+        },
+        {
+          "name": "uploader",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "cid",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "getRsaKey",
       "discriminator": [
         221,

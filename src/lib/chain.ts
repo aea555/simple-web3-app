@@ -7,6 +7,7 @@ import {
   encryptAndUploadSharedAESKey,
 } from "./ipfs";
 import { create } from "@web3-storage/w3up-client";
+import { AnchorWallet } from "@solana/wallet-adapter-react";
 
 /**
  * Fetch all valid FileMetadata accounts uploaded by the current user,
@@ -277,4 +278,37 @@ export async function listSharedFiles(
     sharedBy: entry.account.sharedBy,
     timestamp: entry.account.timestamp,
   }));
+}
+
+/**
+ * Deletes a FileMetadata account from the Solana blockchain for a given CID.
+ *
+ * This operation is only permitted by the original uploader of the file.
+ * The metadata account is closed and its lamports are refunded to the uploader.
+ *
+ * This is useful for cleaning up files that are no longer accessible or needed,
+ * especially during development and testing.
+ *
+ * @param program - The Anchor program instance
+ * @param cid - The content identifier (CID) of the file to be deleted
+ * @param publicKey - The uploader's public key
+ * @returns A Promise that resolves when the transaction is confirmed
+ */
+export async function deleteFileMetadata(
+  program: Program<RsaStorage>,
+  cid: string,
+  publicKey: PublicKey
+) {
+  const [fileMetadataPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("file_metadata"), Buffer.from(keccak_256(cid), "hex")],
+    program.programId
+  );
+
+  await program.methods
+    .deleteFileMetadata(cid) 
+    .accounts({
+      fileMetadata: fileMetadataPda,
+      uploader: publicKey,
+    })
+    .rpc();
 }

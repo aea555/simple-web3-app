@@ -6,6 +6,7 @@ import {
   fetchFileMetadataByCID,
   shareFileWithUser,
   getRSAKeyByPubkey,
+  deleteFileMetadata,
 } from "@/lib/chain";
 import { fetchAESKeyFromKeyCid } from "@/lib/ipfs";
 import { useSolanaProgram } from "@/hooks/useSolanaProgram";
@@ -24,7 +25,6 @@ import fileMemo from "@/features/fetch/fileMemo";
 import { decryptAESKey } from "@/lib/cryptography";
 import { promptAndLoadPrivateKey } from "@/lib/store";
 import handleDecrypt from "@/features/fetch/handleDecrypt";
-import { useWalletConnectionWarning } from "@/hooks/useWalletConnectionWarning";
 
 export default function FetchPage() {
   const wallet = useAnchorWallet();
@@ -36,8 +36,12 @@ export default function FetchPage() {
   const [sortKey, setSortKey] = useState<string>("timestamp"); // 'timestamp', 'cid' (for name)
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc"); // 'desc', 'asc'
   const [showModal, setShowModal] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [showSingleDeleteModal, setShowSingleDeleteModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<any | null>(null);
   const [recipientAddress, setRecipientAddress] = useState("");
+  const [selectedCids, setSelectedCids] = useState<string[]>([]);
+  const [selectedSingleCid, setSelectedSingleCid] = useState<string | null>(null);
   const { client } = useW3();
   const solana = useSolanaProgram(wallet);
 
@@ -87,7 +91,7 @@ export default function FetchPage() {
       toast.success("Metadata fetched. Proceeding to decrypt...", {
         id: "fetchMetadataToast",
       });
-      await handleDecrypt({metadata, wallet, solana, setLoading, setError});
+      await handleDecrypt({ metadata, wallet, solana, setLoading, setError });
       setFileCidInput("");
     } catch (err: any) {
       console.error("Manual fetch failed:", err);
@@ -111,6 +115,7 @@ export default function FetchPage() {
   async function submitShare() {
     if (!solana || !wallet || !selectedFile || !recipientAddress) return;
     try {
+      setShowModal(false);
       const aesKey = await fetchAESKeyFromKeyCid(selectedFile.keyCid);
       const recipientPubkey = new PublicKey(recipientAddress);
       const recipientRsaKey = await getRSAKeyByPubkey(
@@ -123,7 +128,9 @@ export default function FetchPage() {
       if (!recipientRsaKey) {
         throw new Error("Recipient does not have an RSA key registered.");
       }
-      const { privateKey } = await promptAndLoadPrivateKey(wallet.publicKey.toBase58()); 
+      const { privateKey } = await promptAndLoadPrivateKey(
+        wallet.publicKey.toBase58()
+      );
       const decryptedAesKey = await decryptAESKey(aesKey, privateKey);
       const raw = await crypto.subtle.exportKey("raw", decryptedAesKey);
       await shareFileWithUser({
@@ -148,9 +155,52 @@ export default function FetchPage() {
 
       toast.error("Sharing failed: " + errorMessage);
     } finally {
-      setShowModal(false);
       setRecipientAddress("");
       setSelectedFile(null);
+    }
+  }
+
+  async function handleDelete(cid: string) {
+    if (!solana || !wallet) return;
+    const confirmed = confirm("Are you sure you want to delete this file? This action cannot be undone.");
+    if (!confirmed) return;
+
+    try {
+      setShowSingleDeleteModal(false);
+      await deleteFileMetadata(solana.program, cid, wallet.publicKey);
+      toast.success("File deleted successfully.");
+      setUserFiles((prev) => prev.filter((f) => f.cid !== cid));
+    } catch (err) {
+      console.error(err);
+      toast.error(`Failed to delete file. Error message: ${err}`);
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (!wallet || !solana) return;
+
+    const confirmed = confirm("Are you sure you want to delete the selected files? This action cannot be undone.");
+    if (!confirmed) return;
+
+    setShowBulkDeleteModal(false);
+    toast.loading("Deleting files...", { id: "bulkDelete" });
+
+    try {
+      for (const cid of selectedCids) {
+        try {
+          await deleteFileMetadata(solana.program, cid, wallet.publicKey);
+        } catch (e) {
+          console.warn("Couldn't delete file:", cid);
+        }
+      }
+
+      setUserFiles((prev) => prev.filter((f) => !selectedCids.includes(f.cid)));
+      setSelectedCids([]);
+      toast.success("Deleted selected files", { id: "bulkDelete" });
+    } catch (err) {
+      toast.error("Failed to delete files: " + (err as Error).message, {
+        id: "bulkDelete",
+      });
     }
   }
 
@@ -196,6 +246,12 @@ export default function FetchPage() {
         solana={solana}
         setError={setError}
         setLoading={setLoading}
+        selectedCids={selectedCids}
+        setSelectedSingleCid={setSelectedSingleCid}
+        setSelectedCids={setSelectedCids}
+        handleDelete={handleDelete}
+        setShowModal={setShowBulkDeleteModal}
+        setShowModal2={setShowSingleDeleteModal}
       />
 
       {/* Global Error Display */}
@@ -212,8 +268,32 @@ export default function FetchPage() {
         submitFunc={submitShare}
         submitButtonText="Share File"
       />
+
+      {/* Bulk Delete Modal */}
+      <GlobalModal
+        showModal={showBulkDeleteModal}
+        setShowModal={setShowBulkDeleteModal}
+        title="Confirm Deletion"
+        inputPlaceholder="This action cannot be undone."
+        setInputValString={() => {}}
+        submitFunc={handleBulkDelete}
+        submitButtonText="Delete"
+        inputDisabled={true}
+      />
+
+      {/* Bulk Delete Modal */}
+      <GlobalModal
+        showModal={showSingleDeleteModal}
+        setShowModal={setShowSingleDeleteModal}
+        title="Confirm Deletion"
+        inputPlaceholder="This action cannot be undone."
+        setInputValString={() => {}}
+        submitFunc={async () => {
+          if (selectedSingleCid) await handleDelete(selectedSingleCid);
+        }}
+        submitButtonText="Delete"
+        inputDisabled={true}
+      />
     </div>
   );
 }
-
-

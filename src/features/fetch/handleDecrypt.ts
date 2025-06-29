@@ -1,13 +1,15 @@
 import { ellipsify } from "@/components/ui/ui-layout";
 import { fetchAndDecryptFile } from "@/lib/ipfs";
-import { SolanaProgramContext } from "@/lib/types"
+import { SolanaProgramContext, UserFile } from "@/lib/types";
 import { AnchorWallet } from "@solana/wallet-adapter-react";
 import { SetStateAction } from "react";
 import { saveAs } from "file-saver";
 import toast from "react-hot-toast";
+import { getUniquePerformanceMetrics } from "@/lib/metrics";
+import { DownloadMetrics } from "@/lib/metrics";
 
 type handleDecryptProps = {
-  metadata: any;
+  metadata: UserFile;
   wallet: AnchorWallet | undefined;
   solana: SolanaProgramContext | undefined;
   setLoading: (value: SetStateAction<boolean>) => void;
@@ -27,14 +29,29 @@ export default async function handleDecrypt({
     return;
   }
 
+  console.log("METADATA AT HANDLE DECRYPT:", metadata);
+
   setLoading(true);
   setError(null);
   toast.loading("🔓 Decrypting file...", { id: "decryptToast" });
 
+  performance.mark("download:start");
+
   try {
+    performance.mark("download:ipfs:start");
+
     const blob = await fetchAndDecryptFile(metadata, wallet.publicKey.toBase58());
-    const filename = `decrypted-${ellipsify(metadata.cid, 8)}.bin`;
+
+    performance.mark("download:ipfs:end");
+    performance.measure(
+      DownloadMetrics.FetchFromIPFS,
+      "download:ipfs:start",
+      "download:ipfs:end"
+    );
+
+    const filename = `decrypted-${ellipsify(metadata.cid, 8)}.${metadata.extension || "bin"}`;
     saveAs(blob, filename);
+
     toast.success("✅ File decrypted and downloaded!", {
       id: "decryptToast",
     });
@@ -45,6 +62,12 @@ export default async function handleDecrypt({
       id: "decryptToast",
     });
   } finally {
+    performance.mark("download:end");
+    performance.measure(DownloadMetrics.Total, "download:start", "download:end");
+
+    console.log("📊 Decryption performance metrics:");
+    console.table(getUniquePerformanceMetrics());
+
     setLoading(false);
   }
 }

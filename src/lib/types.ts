@@ -7,6 +7,7 @@ export type FileMetadata = {
   keyCid: string;
   timestamp: number;
   isPublic: boolean;
+  extension: string | null;
 };
 
 export type SolanaProgramContext = {
@@ -20,5 +21,6 @@ export type UserFile = {
   uploader: PublicKey;
   timestamp: BN;
   isPublic: boolean;
+  extension: string;
   pubkey: PublicKey;
 };

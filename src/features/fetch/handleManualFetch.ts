@@ -4,6 +4,8 @@ import { AnchorWallet } from "@solana/wallet-adapter-react";
 import { SetStateAction } from "react";
 import handleDecrypt from "./handleDecrypt";
 import toast from "react-hot-toast";
+import { getUniquePerformanceMetrics } from "@/lib/metrics";
+import { ManualFetchMetrics } from "@/lib/metrics";
 
 type handleManualFetchProps = {
   fileCidInput: string;
@@ -14,7 +16,14 @@ type handleManualFetchProps = {
   setFileCidInput: (value: SetStateAction<string>) => void;
 };
 
-export default async function handleManualFetch({fileCidInput, setError, anchorWallet, solana, setLoading, setFileCidInput}: handleManualFetchProps) {
+export default async function handleManualFetch({
+  fileCidInput,
+  setError,
+  anchorWallet,
+  solana,
+  setLoading,
+  setFileCidInput,
+}: handleManualFetchProps) {
   if (!fileCidInput.trim()) {
     setError("Please enter a file CID.");
     toast.error("Please enter a file CID.");
@@ -35,16 +44,41 @@ export default async function handleManualFetch({fileCidInput, setError, anchorW
   setError(null);
   toast.loading("📥 Fetching metadata...", { id: "fetchMetadataToast" });
 
+  performance.mark("manualFetch:start");
+
   try {
+    performance.mark("manualFetch:metadata:start");
     const metadata = await fetchFileMetadataByCID(
       solana.program,
       solana.programId,
       fileCidInput.trim()
     );
+    performance.mark("manualFetch:metadata:end");
+    performance.measure(
+      ManualFetchMetrics.FetchFileMetadata,
+      "manualFetch:metadata:start",
+      "manualFetch:metadata:end"
+    );
+
     toast.success("Metadata fetched. Proceeding to decrypt...", {
       id: "fetchMetadataToast",
     });
-    await handleDecrypt({metadata, anchorWallet, solana, setLoading, setError});
+
+    performance.mark("manualFetch:decrypt:start");
+    await handleDecrypt({
+      metadata,
+      wallet: anchorWallet,
+      solana,
+      setLoading,
+      setError,
+    });
+    performance.mark("manualFetch:decrypt:end");
+    performance.measure(
+      ManualFetchMetrics.DecryptFile,
+      "manualFetch:decrypt:start",
+      "manualFetch:decrypt:end"
+    );
+
     setFileCidInput("");
   } catch (err: any) {
     console.error("Manual fetch failed:", err);
@@ -56,6 +90,17 @@ export default async function handleManualFetch({fileCidInput, setError, anchorW
       { id: "fetchMetadataToast" }
     );
   } finally {
+    performance.mark("manualFetch:end");
+    performance.measure(
+      ManualFetchMetrics.Total,
+      "manualFetch:start",
+      "manualFetch:end"
+    );
+
+    console.log("📊 Manual Fetch performance metrics:");
+    const metrics = getUniquePerformanceMetrics();
+    console.table(metrics);
+
     setLoading(false);
   }
 }

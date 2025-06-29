@@ -25,13 +25,18 @@ pub mod rsa_storage {
         cid: String,
         key_cid: String,
         is_public: bool,
+        extension: String,
     ) -> Result<()> {
+        if extension.len() > 10 {
+            return Err(error!(ErrorCode::ExtensionTooLong));
+        }
         let metadata = &mut ctx.accounts.file_metadata;
         metadata.cid = cid;
         metadata.key_cid = key_cid;
         metadata.uploader = ctx.accounts.uploader.key();
         metadata.timestamp = Clock::get()?.unix_timestamp;
         metadata.is_public = is_public;
+        metadata.extension = extension;
         Ok(())
     }
 
@@ -39,13 +44,18 @@ pub mod rsa_storage {
         ctx: Context<ShareFileAccess>,
         cid: String,
         shared_key_cid: String,
+        extension: String,
     ) -> Result<()> {
+        if extension.len() > 10 {
+            return Err(error!(ErrorCode::ExtensionTooLong));
+        }
         let shared = &mut ctx.accounts.shared_access;
         shared.cid = cid;
         shared.shared_key_cid = shared_key_cid;
         shared.shared_by = ctx.accounts.sharer.key();
         shared.shared_with = ctx.accounts.shared_with.key();
         shared.timestamp = Clock::get()?.unix_timestamp;
+        shared.extension = extension;
         Ok(())
     }
 
@@ -114,6 +124,7 @@ pub struct FileMetadata {
     pub uploader: Pubkey, // who uploaded
     pub timestamp: i64,   // UNIX timestamp
     pub is_public: bool,  // access policy
+    pub extension: String, // file extension 
 }
 
 #[account]
@@ -123,6 +134,7 @@ pub struct SharedAccess {
     pub shared_by: Pubkey,
     pub shared_with: Pubkey,
     pub timestamp: i64,
+    pub extension: String, // file extension 
 }
 
 #[derive(Accounts)]
@@ -160,4 +172,10 @@ pub struct DeleteFileMetadata<'info> {
 
     #[account(mut)]
     pub uploader: Signer<'info>,
+}
+
+#[error_code]
+pub enum ErrorCode {
+    #[msg("The file extension is too long. Maximum 10 characters allowed.")]
+    ExtensionTooLong,
 }

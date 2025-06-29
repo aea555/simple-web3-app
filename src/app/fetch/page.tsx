@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAnchorWallet } from "@solana/wallet-adapter-react";
 import {
   fetchFileMetadataByCID,
@@ -25,8 +25,16 @@ import fileMemo from "@/features/fetch/fileMemo";
 import { decryptAESKey } from "@/lib/cryptography";
 import { promptAndLoadPrivateKey } from "@/lib/store";
 import handleDecrypt from "@/features/fetch/handleDecrypt";
+import usePageLoadMetrics from "@/hooks/usePageLoadMetrics";
+import {
+  DeletionMetrics,
+  getUniquePerformanceMetrics,
+  ManualFetchMetrics,
+  ShareMetrics,
+} from "@/lib/metrics";
 
 export default function FetchPage() {
+  usePageLoadMetrics();
   const wallet = useAnchorWallet();
   const [fileCidInput, setFileCidInput] = useState("");
   const [userFiles, setUserFiles] = useState<UserFile[]>([]);
@@ -38,10 +46,12 @@ export default function FetchPage() {
   const [showModal, setShowModal] = useState(false);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [showSingleDeleteModal, setShowSingleDeleteModal] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<any | null>(null);
+  const [selectedFile, setSelectedFile] = useState<UserFile | null>(null);
   const [recipientAddress, setRecipientAddress] = useState("");
   const [selectedCids, setSelectedCids] = useState<string[]>([]);
-  const [selectedSingleCid, setSelectedSingleCid] = useState<string | null>(null);
+  const [selectedSingleCid, setSelectedSingleCid] = useState<string | null>(
+    null
+  );
   const { client } = useW3();
   const solana = useSolanaProgram(wallet);
 
@@ -62,6 +72,7 @@ export default function FetchPage() {
   });
 
   async function handleManualFetch() {
+    performance.mark("manualFetch:fetchMetadata:start");
     if (!fileCidInput.trim()) {
       setError("Please enter a file CID.");
       toast.error("Please enter a file CID.");
@@ -88,6 +99,12 @@ export default function FetchPage() {
         solana.programId,
         fileCidInput.trim()
       );
+      performance.mark("manualFetch:fetchMetadata:end");
+      performance.measure(
+        ManualFetchMetrics.FetchFileMetadata,
+        "manualFetch:fetchMetadata:start",
+        "manualFetch:fetchMetadata:end"
+      );
       toast.success("Metadata fetched. Proceeding to decrypt...", {
         id: "fetchMetadataToast",
       });
@@ -103,6 +120,15 @@ export default function FetchPage() {
         { id: "fetchMetadataToast" }
       );
     } finally {
+      performance.mark("manualFetch:end");
+      performance.measure(
+        ManualFetchMetrics.Total,
+        "manualFetch:start",
+        "manualFetch:end"
+      );
+
+      const unique = getUniquePerformanceMetrics();
+      console.table(unique);
       setLoading(false);
     }
   }
@@ -113,11 +139,17 @@ export default function FetchPage() {
   }
 
   async function submitShare() {
+    const toastId = toast.loading("Sharing file...");
+    performance.mark("share:start");
     if (!solana || !wallet || !selectedFile || !recipientAddress) return;
     try {
       setShowModal(false);
+      toast.loading("Fetching AES Key...", { id: toastId });
       const aesKey = await fetchAESKeyFromKeyCid(selectedFile.keyCid);
+      toast.success("✅ AES Key fetched.", { id: toastId });
       const recipientPubkey = new PublicKey(recipientAddress);
+      performance.mark("share:fetchRecipient:start");
+      toast.loading("Getting RSA Key by Public Key", { id: toastId });
       const recipientRsaKey = await getRSAKeyByPubkey(
         solana.program,
         recipientPubkey
@@ -128,11 +160,31 @@ export default function FetchPage() {
       if (!recipientRsaKey) {
         throw new Error("Recipient does not have an RSA key registered.");
       }
+      toast.success("✅ RSA Key obtained.", { id: toastId });
+      performance.mark("share:fetchRecipient:end");
+      performance.measure(
+        ShareMetrics.FetchRecipientRSA,
+        "share:fetchRecipient:start",
+        "share:fetchRecipient:end"
+      );
+      toast.loading("Loading up your private key...", { id: toastId });
       const { privateKey } = await promptAndLoadPrivateKey(
         wallet.publicKey.toBase58()
       );
+      toast.success("✅ Private key loaded", { id: toastId });
+      performance.mark("share:decryptAES:start");
+      toast.loading("Decrypting AES Key...", { id: toastId });
       const decryptedAesKey = await decryptAESKey(aesKey, privateKey);
       const raw = await crypto.subtle.exportKey("raw", decryptedAesKey);
+      performance.mark("share:decryptAES:end");
+      performance.measure(
+        ShareMetrics.DecryptAES,
+        "share:decryptAES:start",
+        "share:decryptAES:end"
+      );
+      toast.success("✅ AES Key decrypted.", { id: toastId });
+      performance.mark("share:register:start");
+      toast.loading("Sharing the file with the wallet address...", { id: toastId });
       await shareFileWithUser({
         program: solana.program,
         sharer: wallet,
@@ -140,9 +192,16 @@ export default function FetchPage() {
         aesKeyRaw: raw,
         recipientPubkey: recipientAddress,
         recipientRsaPublicKeyPem: recipientRsaKey,
+        extension: selectedFile.extension || "bin",
         client: client,
       });
-      toast.success("File shared successfully!");
+      performance.mark("share:register:end");
+      performance.measure(
+        ShareMetrics.RegisterShare,
+        "share:register:start",
+        "share:register:end"
+      );
+      toast.success("✅ File shared successfully!", { id: toastId });
     } catch (err) {
       console.error("Sharing failed:", err);
 
@@ -157,17 +216,30 @@ export default function FetchPage() {
     } finally {
       setRecipientAddress("");
       setSelectedFile(null);
+      performance.mark("share:end");
+      performance.measure(ShareMetrics.Total, "share:start", "share:end");
+      console.table(getUniquePerformanceMetrics());
     }
   }
 
   async function handleDelete(cid: string) {
+    performance.mark("delete:single:start");
     if (!solana || !wallet) return;
-    const confirmed = confirm("Are you sure you want to delete this file? This action cannot be undone.");
+    const confirmed = confirm(
+      "Are you sure you want to delete this file? This action cannot be undone."
+    );
     if (!confirmed) return;
 
     try {
       setShowSingleDeleteModal(false);
       await deleteFileMetadata(solana.program, cid, wallet.publicKey);
+      performance.mark("delete:single:end");
+      performance.measure(
+        DeletionMetrics.Single,
+        "delete:single:start",
+        "delete:single:end"
+      );
+      console.table(getUniquePerformanceMetrics());
       toast.success("File deleted successfully.");
       setUserFiles((prev) => prev.filter((f) => f.cid !== cid));
     } catch (err) {
@@ -177,9 +249,12 @@ export default function FetchPage() {
   }
 
   async function handleBulkDelete() {
+    performance.mark("delete:bulk:start");
     if (!wallet || !solana) return;
 
-    const confirmed = confirm("Are you sure you want to delete the selected files? This action cannot be undone.");
+    const confirmed = confirm(
+      "Are you sure you want to delete the selected files? This action cannot be undone."
+    );
     if (!confirmed) return;
 
     setShowBulkDeleteModal(false);
@@ -193,7 +268,13 @@ export default function FetchPage() {
           console.warn("Couldn't delete file:", cid);
         }
       }
-
+      performance.mark("delete:bulk:end");
+      performance.measure(
+        DeletionMetrics.Bulk,
+        "delete:bulk:start",
+        "delete:bulk:end"
+      );
+      console.table(getUniquePerformanceMetrics());
       setUserFiles((prev) => prev.filter((f) => !selectedCids.includes(f.cid)));
       setSelectedCids([]);
       toast.success("Deleted selected files", { id: "bulkDelete" });

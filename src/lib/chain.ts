@@ -110,7 +110,8 @@ export async function storeFileMetadata(
   cid: string,
   keyCid: string,
   uploader: PublicKey,
-  programId: PublicKey
+  programId: PublicKey,
+  extension: string,
 ) {
   const cidHash = Buffer.from(keccak_256.arrayBuffer(cid));
 
@@ -120,7 +121,7 @@ export async function storeFileMetadata(
   );
 
   await program.methods
-    .storeFileMetadata(cid, keyCid, true)
+    .storeFileMetadata(cid, keyCid, true, extension)
     .accounts({
       fileMetadata: fileMetadataPDA,
       uploader,
@@ -205,6 +206,7 @@ export async function shareFileWithUser(options: {
   aesKeyRaw: ArrayBuffer;
   recipientPubkey: string; // base58 string
   recipientRsaPublicKeyPem: string;
+  extension: string;
   client: Awaited<ReturnType<typeof create>>;
 }) {
   const {
@@ -214,6 +216,7 @@ export async function shareFileWithUser(options: {
     aesKeyRaw,
     recipientPubkey,
     recipientRsaPublicKeyPem,
+    extension,
     client,
   } = options;
 
@@ -249,7 +252,7 @@ export async function shareFileWithUser(options: {
   }
 
   await program.methods
-    .shareFileAccess(fileCid, sharedKeyCid)
+    .shareFileAccess(fileCid, sharedKeyCid, extension)
     .accounts(accounts)
     .rpc();
 
@@ -277,6 +280,7 @@ export async function listSharedFiles(
     sharedKeyCid: entry.account.sharedKeyCid,
     sharedBy: entry.account.sharedBy,
     timestamp: entry.account.timestamp,
+    extension: entry.account.extension,
   }));
 }
 

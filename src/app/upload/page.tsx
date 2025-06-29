@@ -15,8 +15,10 @@ import handleUpload from "@/features/upload/handleUpload";
 import handlePrivateKeyDownload from "@/features/upload/handlePrivateKeyDownload";
 import handleImportWrapper from "@/features/common/handleImportWrapper";
 import { hasEncryptedPrivateKey } from "@/lib/store";
+import usePageLoadMetrics from "@/hooks/usePageLoadMetrics";
 
 export default function UploadPage() {
+  usePageLoadMetrics();
   const wallet = useAnchorWallet();
   const [file, setFile] = useState<File | null>(null);
   const [cid, setCid] = useState<CID | null>(null);

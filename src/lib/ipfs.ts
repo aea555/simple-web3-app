@@ -1,6 +1,6 @@
 import { CID } from "multiformats/cid";
 import { base64ToArrayBuffer } from "./helpers";
-import { FileMetadata } from "./types";
+import { FileMetadata, UserFile } from "./types";
 import { AnyLink } from "@web3-storage/w3up-client/types";
 import { decryptAESKey, encryptAESKeyBase64 } from "./cryptography";
 import { promptAndLoadPrivateKey } from "./store";
@@ -75,7 +75,7 @@ export async function fetchFileBinary(cid: CID): Promise<Uint8Array> {
  * Fetch encrypted data + AES key from IPFS and decrypt both.
  */
 export async function fetchAndDecryptFile(
-  fileMeta: FileMetadata,
+  fileMeta: UserFile | FileMetadata,
   walletAddress: string,
 ): Promise<Blob> {
   // 1. Load user's private RSA key
@@ -110,7 +110,7 @@ export async function fetchAndDecryptFile(
     ciphertext
   );
 
-  // 8. Return result as a Blob (or string if it's a text file)
+  // 8. Return result as a Blob 
   return new Blob([decrypted]);
 }
 

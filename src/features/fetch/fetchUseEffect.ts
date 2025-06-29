@@ -4,6 +4,8 @@ import { SolanaProgramContext, UserFile } from "@/lib/types";
 import { AnchorWallet } from "@solana/wallet-adapter-react";
 import { SetStateAction } from "react";
 import toast from "react-hot-toast";
+import { getUniquePerformanceMetrics } from "@/lib/metrics";
+import { MetadataMetrics } from "@/lib/metrics";
 
 type fetchUseEffectProps = {
   wallet: AnchorWallet | undefined;
@@ -26,6 +28,9 @@ export default function fetchUseEffect({
     const loadUserFiles = async () => {
       setLoading(true);
       setError(null);
+
+      performance.mark("metadata:fetch:start");
+
       try {
         const files = await fetchUserFiles(solana.program, wallet.publicKey);
         setUserFiles(files);
@@ -34,6 +39,14 @@ export default function fetchUseEffect({
         setError("Failed to load your files. Please try again.");
         toast.error("Failed to load your files.");
       } finally {
+        performance.mark("metadata:fetch:end");
+        performance.measure(
+          MetadataMetrics.FetchUserFiles,
+          "metadata:fetch:start",
+          "metadata:fetch:end"
+        );
+        console.log("📊 Metadata fetch performance:");
+        console.table(getUniquePerformanceMetrics());
         setLoading(false);
       }
     };
@@ -41,13 +54,12 @@ export default function fetchUseEffect({
     loadUserFiles();
   }, [wallet?.publicKey?.toBase58(), solana]);
 
-  // Secondary effect to show toast after 10 seconds if not initialized
   useEffect(() => {
     const timeout = setTimeout(() => {
       if (!wallet?.publicKey || !solana) {
         toast.error("Wallet not connected or Solana program unavailable");
       }
-    }, 10000); // 10 seconds
+    }, 10000);
 
     return () => clearTimeout(timeout);
   }, [wallet?.publicKey?.toBase58(), solana]);

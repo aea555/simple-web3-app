@@ -7,9 +7,13 @@ import { useSolanaProgram } from "@/hooks/useSolanaProgram";
 import { listSharedFiles } from "@/lib/chain";
 import { fetchAndDecryptSharedFile } from "@/lib/ipfs";
 import { promptAndLoadPrivateKey } from "@/lib/store";
-import { AppHero } from "@/components/ui/ui-layout";
+import { AppHero, ellipsify } from "@/components/ui/ui-layout";
+import usePageLoadMetrics from "@/hooks/usePageLoadMetrics";
+import { getUniquePerformanceMetrics, SharedPageMetrics } from "@/lib/metrics";
+import saveAs from "file-saver";
 
 export default function SharedFilesPage() {
+  usePageLoadMetrics();
   const wallet = useAnchorWallet();
   const { program } = useSolanaProgram(wallet) ?? {};
   const [sharedFiles, setSharedFiles] = useState<any[]>([]);
@@ -19,6 +23,7 @@ export default function SharedFilesPage() {
     if (!program || !wallet?.publicKey) return;
 
     (async () => {
+      performance.mark("shared:list:start");
       try {
         setLoading(true);
         const files = await listSharedFiles(program, wallet.publicKey);
@@ -28,6 +33,14 @@ export default function SharedFilesPage() {
         toast.error("Failed to fetch shared files");
       } finally {
         setLoading(false);
+        performance.mark("shared:list:end");
+        performance.measure(
+          SharedPageMetrics.ListSharedFiles,
+          "shared:list:start",
+          "shared:list:end"
+        );
+        console.log("📊 Performance for shared file fetch:");
+        console.table(getUniquePerformanceMetrics());
       }
     })();
   }, [program, wallet]);
@@ -38,30 +51,52 @@ export default function SharedFilesPage() {
       toast.error("Wallet not connected");
       return;
     }
-    
+
+    performance.mark("shared:decrypt:start");
+
     try {
-      const { privateKey } = await promptAndLoadPrivateKey(wallet.publicKey.toBase58());
+      const { privateKey } = await promptAndLoadPrivateKey(
+        wallet.publicKey.toBase58()
+      );
+
+      toast.success("Private key loaded up", { id: toastId });
+
+      toast.loading("🔓 Fetching and decrypting the shared file...", { id: toastId });
+
       const blob = await fetchAndDecryptSharedFile({
         cid: file.cid,
         sharedKeyCid: file.sharedKeyCid,
         privateKey,
       });
-  
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `shared-${file.cid}`;
-      link.click();
-  
+
+      toast.success("✅ Shared file fetched and decrypted", { id: toastId });
+
+      const filename = `decrypted-${ellipsify(file.cid, 8)}.${
+        file.extension || "bin"
+      }`;
+      saveAs(blob, filename);
+
       toast.success("✅ File decrypted & downloaded", { id: toastId });
     } catch (err: any) {
       console.error(err);
-      toast.error("❌ Failed to decrypt file: " + (err.message || err.toString()), {
-        id: toastId,
-      });
+      toast.error(
+        "❌ Failed to decrypt file: " + (err.message || err.toString()),
+        {
+          id: toastId,
+        }
+      );
+    } finally {
+      performance.mark("shared:decrypt:end");
+      performance.measure(
+        SharedPageMetrics.DecryptSharedFile,
+        "shared:decrypt:start",
+        "shared:decrypt:end"
+      );
+      console.log("📊 Performance for shared file decryption:");
+      console.table(getUniquePerformanceMetrics());
     }
-  }  
-  
+  }
+
   return (
     <div className="flex flex-col items-center min-h-screen-minus-nav px-4 sm:px-6 lg:px-8">
       <div className="flex flex-col lg:flex-row justify-center w-full max-w-7xl mx-auto pt-8 pb-6 items-stretch">
@@ -75,18 +110,25 @@ export default function SharedFilesPage() {
 
         <div className="flex-1 lg:w-1/2 w-full max-w-2xl p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg space-y-6 mx-auto lg:mx-0">
           {loading ? (
-            <div className="text-center text-gray-600 dark:text-gray-300">Loading shared files...</div>
+            <div className="text-center text-gray-600 dark:text-gray-300">
+              Loading shared files...
+            </div>
           ) : sharedFiles.length === 0 ? (
-            <div className="text-center text-gray-500 dark:text-gray-400">No files have been shared with you yet.</div>
+            <div className="text-center text-gray-500 dark:text-gray-400">
+              No files have been shared with you yet.
+            </div>
           ) : (
             <ul className="space-y-4">
               {sharedFiles.map((file, idx) => (
-                <li key={idx} className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-sm">
+                <li
+                  key={idx}
+                  className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg shadow-sm"
+                >
                   <div className="font-mono break-all text-sm mb-2">
                     <strong>CID:</strong> {file.cid}
                   </div>
                   <button
-                    onClick={() => handleDecrypt(file, wallet)}
+                    onClick={() => {handleDecrypt(file, wallet); console.log("Shared file metadata:", file)}}
                     className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-md transition"
                   >
                     🔓 Decrypt & Download

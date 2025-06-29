@@ -135,6 +135,10 @@
         {
           "name": "shared_key_cid",
           "type": "string"
+        },
+        {
+          "name": "extension",
+          "type": "string"
         }
       ]
     },
@@ -177,6 +181,10 @@
         {
           "name": "is_public",
           "type": "bool"
+        },
+        {
+          "name": "extension",
+          "type": "string"
         }
       ]
     },
@@ -277,6 +285,13 @@
       ]
     }
   ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "ExtensionTooLong",
+      "msg": "The file extension is too long. Maximum 10 characters allowed."
+    }
+  ],
   "types": [
     {
       "name": "FileMetadata",
@@ -302,6 +317,10 @@
           {
             "name": "is_public",
             "type": "bool"
+          },
+          {
+            "name": "extension",
+            "type": "string"
           }
         ]
       }
@@ -330,6 +349,10 @@
           {
             "name": "timestamp",
             "type": "i64"
+          },
+          {
+            "name": "extension",
+            "type": "string"
           }
         ]
       }

@@ -141,6 +141,10 @@ export type RsaStorage = {
         {
           "name": "sharedKeyCid",
           "type": "string"
+        },
+        {
+          "name": "extension",
+          "type": "string"
         }
       ]
     },
@@ -183,6 +187,10 @@ export type RsaStorage = {
         {
           "name": "isPublic",
           "type": "bool"
+        },
+        {
+          "name": "extension",
+          "type": "string"
         }
       ]
     },
@@ -283,6 +291,13 @@ export type RsaStorage = {
       ]
     }
   ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "extensionTooLong",
+      "msg": "The file extension is too long. Maximum 10 characters allowed."
+    }
+  ],
   "types": [
     {
       "name": "fileMetadata",
@@ -308,6 +323,10 @@ export type RsaStorage = {
           {
             "name": "isPublic",
             "type": "bool"
+          },
+          {
+            "name": "extension",
+            "type": "string"
           }
         ]
       }
@@ -336,6 +355,10 @@ export type RsaStorage = {
           {
             "name": "timestamp",
             "type": "i64"
+          },
+          {
+            "name": "extension",
+            "type": "string"
           }
         ]
       }

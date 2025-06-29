@@ -8,6 +8,7 @@ import { CID, Version } from "multiformats";
 import { SolanaProgramContext } from "@/lib/types";
 import { Client } from "@web3-storage/w3up-client";
 import toast from "react-hot-toast";
+import { getUniquePerformanceMetrics, UploadMetrics } from "@/lib/metrics";
 
 type handleUploadProps = {
   anchorWallet: AnchorWallet | undefined;
@@ -41,6 +42,8 @@ export default async function handleUpload({
     return;
   }
 
+  performance.mark("upload:start");
+
   setLoading(true);
   setError(null);
   setCid(null);
@@ -56,10 +59,10 @@ export default async function handleUpload({
   const { program, programId } = solana;
 
   try {
-    // 1. Fetch RSA Public Key from Chain
-    toast.loading("Fetching RSA key from blockchain...", {
-      id: "uploadToast",
-    });
+    // 1. Fetch RSA Public Key
+    toast.loading("Fetching RSA key from blockchain...", { id: "uploadToast" });
+    performance.mark("upload:fetchRSA:start");
+
     const rsaKey = await fetchRSAKey(anchorWallet.publicKey, programId, program);
     if (!rsaKey) {
       setError("RSA key not found. Please register your RSA key first.");
@@ -69,12 +72,19 @@ export default async function handleUpload({
       setLoading(false);
       return;
     }
+
+    performance.mark("upload:fetchRSA:end");
+    performance.measure(
+      UploadMetrics.FetchRSAKey,
+      "upload:fetchRSA:start",
+      "upload:fetchRSA:end"
+    );
     toast.success("RSA key fetched.", { id: "uploadToast" });
 
-    // 2. Generate AES Key & Encrypt File
-    toast.loading("Encrypting file and uploading to IPFS...", {
-      id: "uploadToast",
-    });
+    // 2. Generate AES Key & Upload File
+    toast.loading("Encrypting file and uploading to IPFS...", { id: "uploadToast" });
+    performance.mark("upload:file:start");
+
     const aesKey = await generateAESKey();
     const { cid: fileCid, encryptedKey: rawAESKey } = await uploadFile(
       file,
@@ -82,28 +92,55 @@ export default async function handleUpload({
       client
     );
     setCid(CID.parse(fileCid.toString()));
+
+    performance.mark("upload:file:end");
+    performance.measure(
+      UploadMetrics.EncryptAndUploadFile,
+      "upload:file:start",
+      "upload:file:end"
+    );
     toast.success("File encrypted and uploaded to IPFS!", {
       id: "uploadToast",
     });
 
-    // 3. Encrypt AES Key with RSA and Upload to IPFS
-    toast.loading("Encrypting AES key and uploading to IPFS...", {
-      id: "uploadToast",
-    });
+    // 3. Upload AES Key Encrypted with RSA
+    toast.loading("Encrypting AES key and uploading to IPFS...", { id: "uploadToast" });
+    performance.mark("upload:aesKey:start");
+
     const keyCid = await uploadEncryptedAESKey(rsaKey.raw, rawAESKey, client);
+
+    performance.mark("upload:aesKey:end");
+    performance.measure(
+      UploadMetrics.EncryptAndUploadAESKey,
+      "upload:aesKey:start",
+      "upload:aesKey:end"
+    );
     toast.success(`Encrypted AES key uploaded. Key CID: ${ellipsify(keyCid)}`, {
       id: "uploadToast",
     });
 
-    // 4. Store File Metadata On-Chain
+    // 4. Store Metadata On-Chain
     toast.loading("Storing file metadata on-chain...", { id: "uploadToast" });
+    performance.mark("upload:storeMetadata:start");
+
+    const extension = file.name.split('.').pop() || "bin"; // Default to "bin" if no extension
+
     await storeFileMetadata(
       program,
       fileCid.toString(),
       keyCid,
       anchorWallet.publicKey,
-      programId
+      programId,
+      extension
     );
+
+    performance.mark("upload:storeMetadata:end");
+    performance.measure(
+      UploadMetrics.StoreMetadata,
+      "upload:storeMetadata:start",
+      "upload:storeMetadata:end"
+    );
+
     toast.success("✅ Upload complete! Metadata stored on-chain.", {
       id: "uploadToast",
     });
@@ -114,6 +151,10 @@ export default async function handleUpload({
       id: "uploadToast",
     });
   } finally {
+    performance.mark("upload:end");
+    performance.measure(UploadMetrics.Total, "upload:start", "upload:end");
+    console.log("📊 Upload performance metrics:");
+    console.table(getUniquePerformanceMetrics());
     setLoading(false);
   }
 }

@@ -1,82 +1,84 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useWallet, useAnchorWallet } from "@solana/wallet-adapter-react";
-import { fetchUserFiles, fetchFileMetadataByCID } from "@/utils/chain";
-import { fetchAndDecryptFile } from "@/utils/ipfs";
-import { saveAs } from "file-saver";
+import { useEffect, useState } from "react";
+import { useAnchorWallet } from "@solana/wallet-adapter-react";
+import {
+  fetchFileMetadataByCID,
+  shareFileWithUser,
+  getRSAKeyByPubkey,
+  deleteFileMetadata,
+} from "@/lib/chain";
+import { fetchAESKeyFromKeyCid } from "@/lib/ipfs";
 import { useSolanaProgram } from "@/hooks/useSolanaProgram";
-import { SolanaProgramContext } from "@/utils/types";
-import { AppHero, ellipsify } from "@/components/ui/ui-layout";
 import toast from "react-hot-toast";
-import Link from "next/link";
+import { UserFile } from "@/lib/types";
+import { useW3 } from "@/providers/w3Context";
+import { PublicKey } from "@solana/web3.js";
+import Hero from "@/components/ui/Hero";
+import WalletStatus from "@/components/ui/WalletStatus";
+import DecryptByCID from "@/components/fetch/DecryptByCID";
+import ListFiles from "@/components/fetch/ListFiles";
+import GlobalErrorDisplay from "@/components/ui/globalErrorDisplay";
+import GlobalModal from "@/components/ui/GlobalModal";
+import fetchUseEffect from "@/features/fetch/fetchUseEffect";
+import fileMemo from "@/features/fetch/fileMemo";
+import { decryptAESKey } from "@/lib/cryptography";
+import { promptAndLoadPrivateKey } from "@/lib/store";
+import handleDecrypt from "@/features/fetch/handleDecrypt";
+import usePageLoadMetrics from "@/hooks/usePageLoadMetrics";
+import {
+  DeletionMetrics,
+  getUniquePerformanceMetrics,
+  ManualFetchMetrics,
+  ShareMetrics,
+} from "@/lib/metrics";
 
 export default function FetchPage() {
-  const { publicKey } = useWallet();
-  const anchorWallet = useAnchorWallet();
+  usePageLoadMetrics();
+  const wallet = useAnchorWallet();
   const [fileCidInput, setFileCidInput] = useState("");
-  const [userFiles, setUserFiles] = useState<any[]>([]);
+  const [userFiles, setUserFiles] = useState<UserFile[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const solana = useSolanaProgram(anchorWallet);
+  const [timeFilter, setTimeFilter] = useState<string>("all"); // 'all', 'today', 'last7days', 'last30days'
+  const [sortKey, setSortKey] = useState<string>("timestamp"); // 'timestamp', 'cid' (for name)
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc"); // 'desc', 'asc'
+  const [showModal, setShowModal] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [showSingleDeleteModal, setShowSingleDeleteModal] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<UserFile | null>(null);
+  const [recipientAddress, setRecipientAddress] = useState("");
+  const [selectedCids, setSelectedCids] = useState<string[]>([]);
+  const [selectedSingleCid, setSelectedSingleCid] = useState<string | null>(
+    null
+  );
+  const { client } = useW3();
+  const solana = useSolanaProgram(wallet);
 
-  useEffect(() => {
-    const loadUserFiles = async () => {
-      if (!publicKey || !anchorWallet || !solana) {
-        setUserFiles([]);
-        return;
-      }
+  fetchUseEffect({
+    wallet,
+    solana,
+    setUserFiles,
+    setLoading,
+    setError,
+  });
 
-      setLoading(true);
-      setError(null);
-      try {
-        const files = await fetchUserFiles(solana.program, publicKey);
-        files.sort((a: any, b: any) => b.timestamp - a.timestamp);
-        setUserFiles(files);
-      } catch (err) {
-        console.error("Failed to fetch user files:", err);
-        setError("Failed to load your files. Please try again.");
-        toast.error("Failed to load your files.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadUserFiles();
-  }, [publicKey, anchorWallet, solana]);
-
-  async function handleDecrypt(metadata: any) {
-    if (!publicKey || !anchorWallet || !solana) {
-      setError("Please connect your wallet first.");
-      toast.error("Please connect your wallet to decrypt files.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    toast.loading("🔓 Decrypting file...", { id: 'decryptToast' });
-
-    try {
-      const blob = await fetchAndDecryptFile(metadata);
-      const filename = `decrypted-${ellipsify(metadata.cid, 8)}.bin`;
-      saveAs(blob, filename);
-      toast.success("✅ File decrypted and downloaded!", { id: 'decryptToast' });
-    } catch (err: any) {
-      console.error("Decryption failed:", err);
-      setError("❌ Failed to decrypt file: " + (err.message || "Unknown error"));
-      toast.error("❌ Decryption failed: " + (err.message || "Unknown error"), { id: 'decryptToast' });
-    } finally {
-      setLoading(false);
-    }
-  }
+  // Memoized and sorted files array based on filters and sort options
+  const sortedAndFilteredFiles = fileMemo({
+    userFiles,
+    timeFilter,
+    sortKey,
+    sortOrder,
+  });
 
   async function handleManualFetch() {
+    performance.mark("manualFetch:fetchMetadata:start");
     if (!fileCidInput.trim()) {
       setError("Please enter a file CID.");
       toast.error("Please enter a file CID.");
       return;
     }
-    if (!publicKey || !anchorWallet) {
+    if (!wallet || !wallet.publicKey) {
       setError("Please connect your wallet first.");
       toast.error("Please connect your wallet to fetch files.");
       return;
@@ -89,7 +91,7 @@ export default function FetchPage() {
 
     setLoading(true);
     setError(null);
-    toast.loading("📥 Fetching metadata...", { id: 'fetchMetadataToast' });
+    toast.loading("📥 Fetching metadata...", { id: "fetchMetadataToast" });
 
     try {
       const metadata = await fetchFileMetadataByCID(
@@ -97,145 +99,282 @@ export default function FetchPage() {
         solana.programId,
         fileCidInput.trim()
       );
-      toast.success("Metadata fetched. Proceeding to decrypt...", { id: 'fetchMetadataToast' });
-      await handleDecrypt(metadata);
-      setFileCidInput('');
+      performance.mark("manualFetch:fetchMetadata:end");
+      performance.measure(
+        ManualFetchMetrics.FetchFileMetadata,
+        "manualFetch:fetchMetadata:start",
+        "manualFetch:fetchMetadata:end"
+      );
+      toast.success("Metadata fetched. Proceeding to decrypt...", {
+        id: "fetchMetadataToast",
+      });
+      await handleDecrypt({ metadata, wallet, solana, setLoading, setError });
+      setFileCidInput("");
     } catch (err: any) {
       console.error("Manual fetch failed:", err);
-      setError("❌ Failed to fetch file by CID: " + (err.message || "Unknown error"));
-      toast.error("❌ Failed to fetch file: " + (err.message || "Unknown error"), { id: 'fetchMetadataToast' });
+      setError(
+        "❌ Failed to fetch file by CID: " + (err.message || "Unknown error")
+      );
+      toast.error(
+        "❌ Failed to fetch file: " + (err.message || "Unknown error"),
+        { id: "fetchMetadataToast" }
+      );
     } finally {
+      performance.mark("manualFetch:end");
+      performance.measure(
+        ManualFetchMetrics.Total,
+        "manualFetch:start",
+        "manualFetch:end"
+      );
+
+      const unique = getUniquePerformanceMetrics();
+      console.table(unique);
       setLoading(false);
     }
   }
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      toast.success("CID copied to clipboard!");
-    }).catch(err => {
-      console.error("Failed to copy CID:", err);
-      toast.error("Failed to copy CID.");
-    });
-  };
+  async function handleShare(file: UserFile) {
+    setSelectedFile(file);
+    setShowModal(true);
+  }
+
+  async function submitShare() {
+    const toastId = toast.loading("Sharing file...");
+    performance.mark("share:start");
+    if (!solana || !wallet || !selectedFile || !recipientAddress) return;
+    try {
+      setShowModal(false);
+      toast.loading("Fetching AES Key...", { id: toastId });
+      const aesKey = await fetchAESKeyFromKeyCid(selectedFile.keyCid);
+      toast.success("✅ AES Key fetched.", { id: toastId });
+      const recipientPubkey = new PublicKey(recipientAddress);
+      performance.mark("share:fetchRecipient:start");
+      toast.loading("Getting RSA Key by Public Key", { id: toastId });
+      const recipientRsaKey = await getRSAKeyByPubkey(
+        solana.program,
+        recipientPubkey
+      );
+      if (!recipientPubkey) {
+        throw new Error("Invalid recipient public key.");
+      }
+      if (!recipientRsaKey) {
+        throw new Error("Recipient does not have an RSA key registered.");
+      }
+      toast.success("✅ RSA Key obtained.", { id: toastId });
+      performance.mark("share:fetchRecipient:end");
+      performance.measure(
+        ShareMetrics.FetchRecipientRSA,
+        "share:fetchRecipient:start",
+        "share:fetchRecipient:end"
+      );
+      toast.loading("Loading up your private key...", { id: toastId });
+      const { privateKey } = await promptAndLoadPrivateKey(
+        wallet.publicKey.toBase58()
+      );
+      toast.success("✅ Private key loaded", { id: toastId });
+      performance.mark("share:decryptAES:start");
+      toast.loading("Decrypting AES Key...", { id: toastId });
+      const decryptedAesKey = await decryptAESKey(aesKey, privateKey);
+      const raw = await crypto.subtle.exportKey("raw", decryptedAesKey);
+      performance.mark("share:decryptAES:end");
+      performance.measure(
+        ShareMetrics.DecryptAES,
+        "share:decryptAES:start",
+        "share:decryptAES:end"
+      );
+      toast.success("✅ AES Key decrypted.", { id: toastId });
+      performance.mark("share:register:start");
+      toast.loading("Sharing the file with the wallet address...", { id: toastId });
+      await shareFileWithUser({
+        program: solana.program,
+        sharer: wallet,
+        fileCid: selectedFile.cid,
+        aesKeyRaw: raw,
+        recipientPubkey: recipientAddress,
+        recipientRsaPublicKeyPem: recipientRsaKey,
+        extension: selectedFile.extension || "bin",
+        client: client,
+      });
+      performance.mark("share:register:end");
+      performance.measure(
+        ShareMetrics.RegisterShare,
+        "share:register:start",
+        "share:register:end"
+      );
+      toast.success("✅ File shared successfully!", { id: toastId });
+    } catch (err) {
+      console.error("Sharing failed:", err);
+
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : typeof err === "string"
+          ? err
+          : "Unknown error";
+
+      toast.error("Sharing failed: " + errorMessage);
+    } finally {
+      setRecipientAddress("");
+      setSelectedFile(null);
+      performance.mark("share:end");
+      performance.measure(ShareMetrics.Total, "share:start", "share:end");
+      console.table(getUniquePerformanceMetrics());
+    }
+  }
+
+  async function handleDelete(cid: string) {
+    performance.mark("delete:single:start");
+    if (!solana || !wallet) return;
+    const confirmed = confirm(
+      "Are you sure you want to delete this file? This action cannot be undone."
+    );
+    if (!confirmed) return;
+
+    try {
+      setShowSingleDeleteModal(false);
+      await deleteFileMetadata(solana.program, cid, wallet.publicKey);
+      performance.mark("delete:single:end");
+      performance.measure(
+        DeletionMetrics.Single,
+        "delete:single:start",
+        "delete:single:end"
+      );
+      console.table(getUniquePerformanceMetrics());
+      toast.success("File deleted successfully.");
+      setUserFiles((prev) => prev.filter((f) => f.cid !== cid));
+    } catch (err) {
+      console.error(err);
+      toast.error(`Failed to delete file. Error message: ${err}`);
+    }
+  }
+
+  async function handleBulkDelete() {
+    performance.mark("delete:bulk:start");
+    if (!wallet || !solana) return;
+
+    const confirmed = confirm(
+      "Are you sure you want to delete the selected files? This action cannot be undone."
+    );
+    if (!confirmed) return;
+
+    setShowBulkDeleteModal(false);
+    toast.loading("Deleting files...", { id: "bulkDelete" });
+
+    try {
+      for (const cid of selectedCids) {
+        try {
+          await deleteFileMetadata(solana.program, cid, wallet.publicKey);
+        } catch (e) {
+          console.warn("Couldn't delete file:", cid);
+        }
+      }
+      performance.mark("delete:bulk:end");
+      performance.measure(
+        DeletionMetrics.Bulk,
+        "delete:bulk:start",
+        "delete:bulk:end"
+      );
+      console.table(getUniquePerformanceMetrics());
+      setUserFiles((prev) => prev.filter((f) => !selectedCids.includes(f.cid)));
+      setSelectedCids([]);
+      toast.success("Deleted selected files", { id: "bulkDelete" });
+    } catch (err) {
+      toast.error("Failed to delete files: " + (err as Error).message, {
+        id: "bulkDelete",
+      });
+    }
+  }
 
   return (
     <div className="flex flex-col items-center min-h-screen-minus-nav px-4 sm:px-6 lg:px-8">
       {/* Top Section: Left and Right Columns for AppHero and Decrypt by CID */}
-      {/* Added `items-stretch` to make columns equal height */}
       <div className="flex flex-col lg:flex-row justify-center w-full max-w-7xl mx-auto pt-8 pb-6 items-stretch">
         {/* Left Column: Title */}
-        {/* Added `flex` and `items-center justify-center` to vertically and horizontally center AppHero within its column height */}
-        <div className="lg:w-1/2 flex items-center justify-center lg:justify-end mb-0 lg:pr-8 lg:mb-0">
-          <AppHero
-            className="mb-0"
-            title="Access Your Encrypted Files"
-            subtitle="Retrieve and decrypt your private data stored on IPFS."
-          />
-        </div>
+        <Hero
+          title="Access Your Encrypted Files"
+          subtitle="Retrieve and decrypt your private data stored on IPFS."
+        />
 
-        {/* Right Column: Main Content for Decrypt by CID */}
-        {/* Added `flex flex-col justify-center` to vertically center content within this column */}
+        {/* Main Content for Decrypt by CID */}
         <div className="flex-1 lg:w-1/2 w-full max-w-2xl p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg space-y-6 mx-auto lg:mx-0 flex flex-col justify-center">
           {/* Wallet Connection Status */}
-          <div className="text-center mb-4">
-            {publicKey ? (
-              <p className="text-sm text-gray-700 dark:text-gray-300">
-                Connected Wallet: <span className="font-semibold text-violet-600 dark:text-violet-400">{ellipsify(publicKey.toBase58())}</span>
-              </p>
-            ) : (
-              <p className="text-sm text-red-600 dark:text-red-400">Please connect your Solana wallet to access files.</p>
-            )}
-          </div>
+          <WalletStatus publicKey={wallet?.publicKey} />
 
           {/* Decrypt by CID Section */}
-          <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 shadow-sm space-y-4">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Decrypt by File CID</h2>
-            <input
-              type="text"
-              placeholder="Enter full file CID (e.g., bafybeia...)"
-              value={fileCidInput}
-              onChange={(e) => setFileCidInput(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-violet-500 focus:border-violet-500 transition duration-200"
-              disabled={loading || !publicKey}
-            />
-            <button
-              onClick={handleManualFetch}
-              className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75"
-              disabled={loading || !fileCidInput.trim() || !publicKey}
-            >
-              {loading ? (
-                <span className="flex items-center justify-center">
-                  <span className="loading loading-spinner loading-sm mr-2"></span> Processing...
-                </span>
-              ) : (
-                "Decrypt File by CID"
-              )}
-            </button>
-          </div>
+          <DecryptByCID
+            fileCidInput={fileCidInput}
+            setFileCidInput={setFileCidInput}
+            loading={loading}
+            publicKey={wallet?.publicKey}
+            handleManualFetch={handleManualFetch}
+          />
         </div>
       </div>
 
-      {/* Your Uploaded Files Section (Full Width) */}
-      <div className="w-full max-w-4xl p-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg space-y-6 mt-8 mx-auto">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Your Uploaded Files</h2>
-        {loading && (
-          <div className="text-center py-4">
-            <span className="loading loading-spinner loading-md text-violet-600"></span>
-            <p className="text-gray-600 dark:text-gray-400 mt-2">Loading your files...</p>
-          </div>
-        )}
-        {!loading && userFiles.length === 0 && publicKey && (
-          <p className="text-gray-600 dark:text-gray-400 text-center py-4">No files uploaded yet. Go to the <Link href="/upload" className="text-violet-600 hover:underline">Upload page</Link> to get started!</p>
-        )}
-        {!loading && !publicKey && (
-          <p className="text-gray-600 dark:text-gray-400 text-center py-4">Connect your wallet to see your uploaded files.</p>
-        )}
-        <div className="space-y-3">
-          {userFiles.map((file) => (
-            <div
-              key={file.pubkey.toBase58()}
-              className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700"
-            >
-              <div className="flex-1 mb-2 sm:mb-0">
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 break-all">
-                  CID: <span className="font-mono text-violet-600 dark:text-violet-400">{file.cid}</span>
-                  <button
-                    onClick={() => copyToClipboard(file.cid)}
-                    className="ml-2 px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-md transition duration-200"
-                    aria-label="Copy CID"
-                  >
-                    Copy
-                  </button>
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Uploaded: {new Date(file.timestamp * 1000).toLocaleString()}
-                </p>
-              </div>
-              <button
-                onClick={() => handleDecrypt(file)}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg text-sm shadow-md transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75"
-                disabled={loading}
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center">
-                    <span className="loading loading-spinner loading-xs mr-1"></span> Decrypting...
-                  </span>
-                ) : (
-                  "Decrypt & Download"
-                )}
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Uploaded Files Section*/}
+      <ListFiles
+        timeFilter={timeFilter}
+        setTimeFilter={setTimeFilter}
+        sortKey={sortKey}
+        setSortKey={setSortKey}
+        sortOrder={sortOrder}
+        setSortOrder={setSortOrder}
+        loading={loading}
+        userFiles={userFiles}
+        sortedAndFilteredFiles={sortedAndFilteredFiles}
+        handleShare={handleShare}
+        wallet={wallet}
+        solana={solana}
+        setError={setError}
+        setLoading={setLoading}
+        selectedCids={selectedCids}
+        setSelectedSingleCid={setSelectedSingleCid}
+        setSelectedCids={setSelectedCids}
+        handleDelete={handleDelete}
+        setShowModal={setShowBulkDeleteModal}
+        setShowModal2={setShowSingleDeleteModal}
+      />
 
       {/* Global Error Display */}
-      {error && (
-        <div className="w-full max-w-4xl p-3 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-lg border border-red-200 dark:border-red-700 mt-6 mx-auto">
-          <p className="font-medium">Error:</p>
-          <p className="text-sm">{error}</p>
-        </div>
-      )}
+      <GlobalErrorDisplay error={error} />
+
+      {/* Share File Modal */}
+      <GlobalModal
+        showModal={showModal}
+        setShowModal={setShowModal}
+        title="Share File"
+        inputValueString={recipientAddress}
+        inputPlaceholder="Recipient wallet address"
+        setInputValString={setRecipientAddress}
+        submitFunc={submitShare}
+        submitButtonText="Share File"
+      />
+
+      {/* Bulk Delete Modal */}
+      <GlobalModal
+        showModal={showBulkDeleteModal}
+        setShowModal={setShowBulkDeleteModal}
+        title="Confirm Deletion"
+        inputPlaceholder="This action cannot be undone."
+        setInputValString={() => {}}
+        submitFunc={handleBulkDelete}
+        submitButtonText="Delete"
+        inputDisabled={true}
+      />
+
+      {/* Bulk Delete Modal */}
+      <GlobalModal
+        showModal={showSingleDeleteModal}
+        setShowModal={setShowSingleDeleteModal}
+        title="Confirm Deletion"
+        inputPlaceholder="This action cannot be undone."
+        setInputValString={() => {}}
+        submitFunc={async () => {
+          if (selectedSingleCid) await handleDelete(selectedSingleCid);
+        }}
+        submitButtonText="Delete"
+        inputDisabled={true}
+      />
     </div>
   );
 }

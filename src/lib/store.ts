@@ -3,31 +3,39 @@
 */
 
 import { set, get, del } from "idb-keyval";
-import { convertPemToBinary, decryptPrivateKeyWithPassword, encryptPrivateKeyWithPassword } from "./cryptography";
+import {
+  convertPemToBinary,
+  decryptPrivateKeyWithPassword,
+  encryptPrivateKeyWithPassword,
+} from "./cryptography";
 
 /*
   - Store the private RSA key in browser (IndexedDB).
 */
 export async function storeEncryptedPrivateKey(
+  walletAddress: string,
   cipherText: Uint8Array,
   iv: Uint8Array,
   salt: Uint8Array
 ) {
-  await set("rsa-private-key-ciphertext", cipherText);
-  await set("rsa-private-key-iv", iv);
-  await set("rsa-private-key-salt", salt);
+  await set(`rsa-private-key-ciphertext-${walletAddress}`, cipherText);
+  await set(`rsa-private-key-iv-${walletAddress}`, iv);
+  await set(`rsa-private-key-salt-${walletAddress}`, salt);
 }
 
 /*
   - Retrieve the private RSA key from browser storage.
 */
-export async function getDecryptedPrivateKey(password: string): Promise<CryptoKey | undefined> {
-  const cipherText = await get<Uint8Array>("rsa-private-key-ciphertext");
-  const iv = await get<Uint8Array>("rsa-private-key-iv");
-  const salt = await get<Uint8Array>("rsa-private-key-salt");
-
+export async function getDecryptedPrivateKey(
+  walletAddress: string,
+  password: string
+): Promise<CryptoKey | undefined> {
+  const cipherText = await get<Uint8Array>(
+    `rsa-private-key-ciphertext-${walletAddress}`
+  );
+  const iv = await get<Uint8Array>(`rsa-private-key-iv-${walletAddress}`);
+  const salt = await get<Uint8Array>(`rsa-private-key-salt-${walletAddress}`);
   if (!cipherText || !iv || !salt) return undefined;
-
   try {
     return await decryptPrivateKeyWithPassword(cipherText, password, iv, salt);
   } catch (e) {
@@ -39,11 +47,14 @@ export async function getDecryptedPrivateKey(password: string): Promise<CryptoKe
 /*
   - Check if there is an encrypted private key stored.
 */
-export async function hasEncryptedPrivateKey(): Promise<boolean> {
-  const cipherText = await get<Uint8Array>("rsa-private-key-ciphertext");
-  const iv = await get<Uint8Array>("rsa-private-key-iv");
-  const salt = await get<Uint8Array>("rsa-private-key-salt");
-
+export async function hasEncryptedPrivateKey(
+  walletAddress: string
+): Promise<boolean> {
+  const cipherText = await get<Uint8Array>(
+    `rsa-private-key-ciphertext-${walletAddress}`
+  );
+  const iv = await get<Uint8Array>(`rsa-private-key-iv-${walletAddress}`);
+  const salt = await get<Uint8Array>(`rsa-private-key-salt-${walletAddress}`);
   return !!(cipherText && iv && salt);
 }
 
@@ -51,17 +62,24 @@ export async function hasEncryptedPrivateKey(): Promise<boolean> {
  * Prompts user for RSA key password and tries to decrypt it.
  * Throws if password is missing or decryption fails.
  */
-export async function promptAndLoadPrivateKey(): Promise<{privateKey: CryptoKey, password: string}>{
+export async function promptAndLoadPrivateKey(walletAddress: string): Promise<{
+  privateKey: CryptoKey;
+  password: string;
+}> {
   const password = prompt("Enter the password to unlock your private RSA key:");
-  if (!password) throw new Error("Password is required to decrypt private key.");
+  if (!password)
+    throw new Error("Password is required to decrypt private key.");
 
-  const privateKey = await getDecryptedPrivateKey(password);
-  if (!privateKey) throw new Error("Invalid password or failed to decrypt private key.");
+  const privateKey = await getDecryptedPrivateKey(walletAddress, password);
+  if (!privateKey)
+    throw new Error("Invalid password or failed to decrypt private key.");
 
-  return {privateKey, password};
+  return { privateKey, password };
 }
 
-export function promptPassword(message: string = "Enter your private key password"): string | null {
+export function promptPassword(
+  message: string = "Enter your private key password"
+): string | null {
   const password = prompt(message);
   if (!password || password.trim() === "") return null;
   return password;
@@ -74,11 +92,14 @@ export async function exportEncryptedPrivateKeyToPem(
   privateKey: CryptoKey,
   password: string
 ): Promise<string> {
-  const { cipherText, iv, salt } = await encryptPrivateKeyWithPassword(privateKey, password);
+  const { cipherText, iv, salt } = await encryptPrivateKeyWithPassword(
+    privateKey,
+    password
+  );
   const payload = JSON.stringify({
     iv: Array.from(iv),
     salt: Array.from(salt),
-    cipher: Array.from(cipherText)
+    cipher: Array.from(cipherText),
   });
   const b64 = btoa(payload);
   const pemLines = b64.match(/.{1,64}/g)?.join("\n");
@@ -88,7 +109,10 @@ export async function exportEncryptedPrivateKeyToPem(
 /*
   - Trigger download of the PEM string as a .pem file.
 */
-export async function downloadEncryptedPrivateKeyPem(privateKey: CryptoKey, password: string) {
+export async function downloadEncryptedPrivateKeyPem(
+  privateKey: CryptoKey,
+  password: string
+) {
   const pem = await exportEncryptedPrivateKeyToPem(privateKey, password);
   const blob = new Blob([pem], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
@@ -124,28 +148,22 @@ export function isValidPrivateKeyPem(pem: string): boolean {
   );
 }
 
-/*
-  - Store a delegation CAR file (as Uint8Array) and its expiration time (in seconds)
-*/
-export async function storeDelegation(bytes: Uint8Array, expiration: number) {
-  await set("w3up-delegation", bytes);
-  await set("w3up-delegation-exp", expiration);
+export async function storeW3SpaceDID(did: string) {
+  await set("w3up-space-did", did);
 }
 
-/*
-  - Retrieve the stored delegation CAR and expiration, or return undefined if not found.
-*/
-export async function getDelegation(): Promise<{ bytes: Uint8Array; exp: number } | undefined> {
-  const bytes = await get<Uint8Array>("w3up-delegation");
-  const exp = await get<number>("w3up-delegation-exp");
-  if (!bytes || typeof exp !== "number") return undefined;
-  return { bytes, exp };
+export async function getW3SpaceDID(): Promise<
+  `did:${string}:${string}` | undefined
+> {
+  return await get("w3up-space-did");
 }
 
-/*
-  - Remove delegation data from storage (e.g. when expired or invalid)
-*/
-export async function clearDelegation() {
-  await del("w3up-delegation");
-  await del("w3up-delegation-exp");
+export async function clearW3Setup() {
+  await del("w3up-space-did");
+}
+
+export async function clearEncryptedPrivateKey(walletAddress: string) {
+  await del(`rsa-private-key-ciphertext-${walletAddress}`);
+  await del(`rsa-private-key-iv-${walletAddress}`);
+  await del(`rsa-private-key-salt-${walletAddress}`);
 }

@@ -1,4 +1,3 @@
-import { decryptPrivateKeyWithPassword } from "./cryptography";
 import {
   storeEncryptedPrivateKey,
 } from "./store";
@@ -37,7 +36,8 @@ export async function handlePrivateKeyImport(
   e: React.ChangeEvent<HTMLInputElement>,
   setHasPrivateKey: (value: boolean) => void,
   setStatus: (value: string | null) => void,
-  setError: (value: string | null) => void
+  setError: (value: string | null) => void,
+  walletAddress: string
 ) {
   const file = e.target.files?.[0];
   if (!file) return;
@@ -59,14 +59,12 @@ export async function handlePrivateKeyImport(
     const b64 = pemText.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
     const decoded = JSON.parse(atob(b64));
 
-    const privateKey = await decryptPrivateKeyWithPassword(
-      new Uint8Array(decoded.cipher),
-      password,
-      new Uint8Array(decoded.iv),
-      new Uint8Array(decoded.salt)
-    );
+    if (!decoded.iv || !decoded.salt || !decoded.cipher) {
+      throw new Error("❌ Invalid PEM content: missing required fields.");
+    }
 
     await storeEncryptedPrivateKey(
+      walletAddress,
       new Uint8Array(decoded.cipher),
       new Uint8Array(decoded.iv),
       new Uint8Array(decoded.salt)

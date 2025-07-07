@@ -1,17 +1,18 @@
 import { CID } from "multiformats/cid";
 import { base64ToArrayBuffer } from "./helpers";
-import { FileMetadata } from "./types";
-import { initWeb3Client } from "./web3client";
+import { FileMetadata, UserFile } from "./types";
 import { AnyLink } from "@web3-storage/w3up-client/types";
 import { decryptAESKey, encryptAESKeyBase64 } from "./cryptography";
-import { getDecryptedPrivateKey, promptAndLoadPrivateKey } from "./store";
+import { promptAndLoadPrivateKey } from "./store";
+import { create } from "@web3-storage/w3up-client";
 
 /**
  * Encrypts a file with AES-GCM, uploads it to Web3.Storage, and returns its CID + exported AES key.
  */
 export async function uploadFile(
   file: File,
-  aesKey: CryptoKey
+  aesKey: CryptoKey,
+  client: Awaited<ReturnType<typeof create>>
 ): Promise<{ cid: AnyLink; encryptedKey: ArrayBuffer }> {
   // Read file into ArrayBuffer
   const fileBuffer = await file.arrayBuffer();
@@ -33,7 +34,6 @@ export async function uploadFile(
   encryptedBuffer.set(new Uint8Array(encrypted), iv.length);
 
   // Upload to Web3.Storage using W3UP
-  const client = await initWeb3Client();
   const encryptedFile = new File([encryptedBuffer], "encrypted.bin", {
     type: "application/octet-stream",
   });
@@ -75,10 +75,11 @@ export async function fetchFileBinary(cid: CID): Promise<Uint8Array> {
  * Fetch encrypted data + AES key from IPFS and decrypt both.
  */
 export async function fetchAndDecryptFile(
-  fileMeta: FileMetadata
+  fileMeta: UserFile | FileMetadata,
+  walletAddress: string,
 ): Promise<Blob> {
   // 1. Load user's private RSA key
-  const { privateKey } = await promptAndLoadPrivateKey();
+  const { privateKey } = await promptAndLoadPrivateKey(walletAddress);
   if (!privateKey) throw new Error("Invalid password or corrupted key data.");
 
   // 2. Fetch encrypted AES key JSON from IPFS
@@ -109,7 +110,7 @@ export async function fetchAndDecryptFile(
     ciphertext
   );
 
-  // 8. Return result as a Blob (or string if it's a text file)
+  // 8. Return result as a Blob 
   return new Blob([decrypted]);
 }
 
@@ -120,10 +121,9 @@ export async function fetchAndDecryptFile(
  * @returns CID string of the uploaded JSON file
  */
 export async function uploadEncryptedAESKeyToIPFS(
-  encryptedKeyBase64: string
+  encryptedKeyBase64: string,
+  client: Awaited<ReturnType<typeof create>>
 ): Promise<string> {
-  const client = await initWeb3Client();
-
   const keyJson = JSON.stringify({
     encrypted_aes_key: encryptedKeyBase64,
   });
@@ -139,11 +139,72 @@ export async function uploadEncryptedAESKeyToIPFS(
 
 export async function uploadEncryptedAESKey(
   publicKeyPem: string,
-  rawAESKey: ArrayBuffer
+  rawAESKey: ArrayBuffer,
+  client: Awaited<ReturnType<typeof create>>
 ): Promise<string> {
   const encryptedAESKeyBase64 = await encryptAESKeyBase64(
     publicKeyPem,
     rawAESKey
   );
-  return await uploadEncryptedAESKeyToIPFS(encryptedAESKeyBase64);
+  return await uploadEncryptedAESKeyToIPFS(encryptedAESKeyBase64, client);
+}
+
+/**
+ * Encrypts an AES key with recipient's RSA public key and uploads it to IPFS.
+ */
+export async function encryptAndUploadSharedAESKey(
+  aesKeyRaw: ArrayBuffer,
+  recipientPublicKeyPem: string,
+  client: Awaited<ReturnType<typeof create>>
+): Promise<string> {
+  const encryptedKeyBase64 = await encryptAESKeyBase64(
+    recipientPublicKeyPem,
+    aesKeyRaw
+  );
+
+  const cid = await uploadEncryptedAESKeyToIPFS(encryptedKeyBase64, client);
+  return cid.toString();
+}
+
+/*
+  * Fetches a shared file from IPFS, decrypts the AES key using the user's private RSA key,
+  * and then decrypts the file content using that AES key.
+  */
+export async function fetchAndDecryptSharedFile(options: {
+  cid: string;
+  sharedKeyCid: string;
+  privateKey: CryptoKey;
+}): Promise<Blob> {
+  const { cid, sharedKeyCid, privateKey } = options;
+
+  const keyFile = await fetchFileBinary(CID.parse(sharedKeyCid));
+  const encryptedKeyJSON = JSON.parse(new TextDecoder().decode(keyFile));
+  const aesKeyBuffer = Uint8Array.from(
+    atob(encryptedKeyJSON.encrypted_aes_key),
+    (c) => c.charCodeAt(0)
+  ).buffer;
+
+  const aesKey = await decryptAESKey(aesKeyBuffer, privateKey);
+
+  const encryptedFile = await fetchFileBinary(CID.parse(cid));
+  const iv = encryptedFile.slice(0, 12);
+  const ciphertext = encryptedFile.slice(12);
+
+  const decrypted = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv },
+    aesKey,
+    ciphertext
+  );
+
+  return new Blob([decrypted]);
+}
+
+export async function fetchAESKeyFromKeyCid(keyCid: string): Promise<ArrayBuffer> {
+  const keyFile = await fetchFileBinary(CID.parse(keyCid));
+  const encryptedKeyJSON = JSON.parse(new TextDecoder().decode(keyFile));
+  const aesKeyBuffer = Uint8Array.from(
+    atob(encryptedKeyJSON.encrypted_aes_key),
+    (c) => c.charCodeAt(0)
+  ).buffer;
+  return aesKeyBuffer;
 }

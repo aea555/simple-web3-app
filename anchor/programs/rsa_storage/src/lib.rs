@@ -25,13 +25,41 @@ pub mod rsa_storage {
         cid: String,
         key_cid: String,
         is_public: bool,
+        extension: String,
     ) -> Result<()> {
+        if extension.len() > 10 {
+            return Err(error!(ErrorCode::ExtensionTooLong));
+        }
         let metadata = &mut ctx.accounts.file_metadata;
         metadata.cid = cid;
         metadata.key_cid = key_cid;
         metadata.uploader = ctx.accounts.uploader.key();
         metadata.timestamp = Clock::get()?.unix_timestamp;
         metadata.is_public = is_public;
+        metadata.extension = extension;
+        Ok(())
+    }
+
+    pub fn share_file_access(
+        ctx: Context<ShareFileAccess>,
+        cid: String,
+        shared_key_cid: String,
+        extension: String,
+    ) -> Result<()> {
+        if extension.len() > 10 {
+            return Err(error!(ErrorCode::ExtensionTooLong));
+        }
+        let shared = &mut ctx.accounts.shared_access;
+        shared.cid = cid;
+        shared.shared_key_cid = shared_key_cid;
+        shared.shared_by = ctx.accounts.sharer.key();
+        shared.shared_with = ctx.accounts.shared_with.key();
+        shared.timestamp = Clock::get()?.unix_timestamp;
+        shared.extension = extension;
+        Ok(())
+    }
+
+    pub fn delete_file_metadata(ctx: Context<DeleteFileMetadata>, cid: String) -> Result<()> {
         Ok(())
     }
 }
@@ -91,9 +119,63 @@ pub struct UserRSAKey {
 
 #[account]
 pub struct FileMetadata {
-    pub cid: String,             // IPFS CID
-    pub key_cid: String,         // IPFS Aes key CID
-    pub uploader: Pubkey,        // who uploaded
-    pub timestamp: i64,          // UNIX timestamp
-    pub is_public: bool,         // access policy
+    pub cid: String,      // IPFS CID
+    pub key_cid: String,  // IPFS Aes key CID
+    pub uploader: Pubkey, // who uploaded
+    pub timestamp: i64,   // UNIX timestamp
+    pub is_public: bool,  // access policy
+    pub extension: String, // file extension 
+}
+
+#[account]
+pub struct SharedAccess {
+    pub cid: String,
+    pub shared_key_cid: String,
+    pub shared_by: Pubkey,
+    pub shared_with: Pubkey,
+    pub timestamp: i64,
+    pub extension: String, // file extension 
+}
+
+#[derive(Accounts)]
+#[instruction(cid: String)]
+pub struct ShareFileAccess<'info> {
+    #[account(mut)]
+    pub sharer: Signer<'info>,
+
+    /// CHECK: not dangerous; used for PDA seed
+    pub shared_with: UncheckedAccount<'info>,
+
+    #[account(
+        init,
+        seeds = [b"shared_access", &keccak::hash(cid.as_bytes()).to_bytes()[..], shared_with.key().as_ref()],
+        bump,
+        payer = sharer,
+        space = 8 + 128 + 128 + 32 + 32 + 8
+    )]
+    pub shared_access: Account<'info, SharedAccess>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(cid: String)]
+pub struct DeleteFileMetadata<'info> {
+    #[account(
+        mut,
+        close = uploader,
+        seeds = [b"file_metadata", &keccak::hash(cid.as_bytes()).to_bytes()[..]],
+        bump,
+        constraint = file_metadata.uploader == uploader.key()
+    )]
+    pub file_metadata: Account<'info, FileMetadata>,
+
+    #[account(mut)]
+    pub uploader: Signer<'info>,
+}
+
+#[error_code]
+pub enum ErrorCode {
+    #[msg("The file extension is too long. Maximum 10 characters allowed.")]
+    ExtensionTooLong,
 }

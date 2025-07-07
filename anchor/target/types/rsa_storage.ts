@@ -14,6 +14,36 @@ export type RsaStorage = {
   },
   "instructions": [
     {
+      "name": "deleteFileMetadata",
+      "discriminator": [
+        64,
+        81,
+        242,
+        142,
+        56,
+        130,
+        204,
+        37
+      ],
+      "accounts": [
+        {
+          "name": "fileMetadata",
+          "writable": true
+        },
+        {
+          "name": "uploader",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "cid",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "getRsaKey",
       "discriminator": [
         221,
@@ -74,6 +104,51 @@ export type RsaStorage = {
       "args": []
     },
     {
+      "name": "shareFileAccess",
+      "discriminator": [
+        233,
+        253,
+        172,
+        86,
+        100,
+        51,
+        138,
+        119
+      ],
+      "accounts": [
+        {
+          "name": "sharer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "sharedWith"
+        },
+        {
+          "name": "sharedAccess",
+          "writable": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "cid",
+          "type": "string"
+        },
+        {
+          "name": "sharedKeyCid",
+          "type": "string"
+        },
+        {
+          "name": "extension",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "storeFileMetadata",
       "discriminator": [
         42,
@@ -112,6 +187,10 @@ export type RsaStorage = {
         {
           "name": "isPublic",
           "type": "bool"
+        },
+        {
+          "name": "extension",
+          "type": "string"
         }
       ]
     },
@@ -186,6 +265,19 @@ export type RsaStorage = {
       ]
     },
     {
+      "name": "sharedAccess",
+      "discriminator": [
+        133,
+        221,
+        251,
+        154,
+        37,
+        64,
+        34,
+        178
+      ]
+    },
+    {
       "name": "userRsaKey",
       "discriminator": [
         179,
@@ -197,6 +289,13 @@ export type RsaStorage = {
         200,
         59
       ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "extensionTooLong",
+      "msg": "The file extension is too long. Maximum 10 characters allowed."
     }
   ],
   "types": [
@@ -224,6 +323,42 @@ export type RsaStorage = {
           {
             "name": "isPublic",
             "type": "bool"
+          },
+          {
+            "name": "extension",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "sharedAccess",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "cid",
+            "type": "string"
+          },
+          {
+            "name": "sharedKeyCid",
+            "type": "string"
+          },
+          {
+            "name": "sharedBy",
+            "type": "pubkey"
+          },
+          {
+            "name": "sharedWith",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "extension",
+            "type": "string"
           }
         ]
       }

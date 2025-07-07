@@ -8,6 +8,36 @@
   },
   "instructions": [
     {
+      "name": "delete_file_metadata",
+      "discriminator": [
+        64,
+        81,
+        242,
+        142,
+        56,
+        130,
+        204,
+        37
+      ],
+      "accounts": [
+        {
+          "name": "file_metadata",
+          "writable": true
+        },
+        {
+          "name": "uploader",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "cid",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "get_rsa_key",
       "discriminator": [
         221,
@@ -68,6 +98,51 @@
       "args": []
     },
     {
+      "name": "share_file_access",
+      "discriminator": [
+        233,
+        253,
+        172,
+        86,
+        100,
+        51,
+        138,
+        119
+      ],
+      "accounts": [
+        {
+          "name": "sharer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "shared_with"
+        },
+        {
+          "name": "shared_access",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "cid",
+          "type": "string"
+        },
+        {
+          "name": "shared_key_cid",
+          "type": "string"
+        },
+        {
+          "name": "extension",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "store_file_metadata",
       "discriminator": [
         42,
@@ -106,6 +181,10 @@
         {
           "name": "is_public",
           "type": "bool"
+        },
+        {
+          "name": "extension",
+          "type": "string"
         }
       ]
     },
@@ -180,6 +259,19 @@
       ]
     },
     {
+      "name": "SharedAccess",
+      "discriminator": [
+        133,
+        221,
+        251,
+        154,
+        37,
+        64,
+        34,
+        178
+      ]
+    },
+    {
       "name": "UserRSAKey",
       "discriminator": [
         179,
@@ -191,6 +283,13 @@
         200,
         59
       ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "ExtensionTooLong",
+      "msg": "The file extension is too long. Maximum 10 characters allowed."
     }
   ],
   "types": [
@@ -218,6 +317,42 @@
           {
             "name": "is_public",
             "type": "bool"
+          },
+          {
+            "name": "extension",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SharedAccess",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "cid",
+            "type": "string"
+          },
+          {
+            "name": "shared_key_cid",
+            "type": "string"
+          },
+          {
+            "name": "shared_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "shared_with",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "extension",
+            "type": "string"
           }
         ]
       }

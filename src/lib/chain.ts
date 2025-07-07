@@ -2,6 +2,12 @@ import { Program } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { RsaStorage } from "@project/anchor";
 import { keccak_256 } from "js-sha3";
+import { hexToBytes } from "@noble/hashes/utils";
+import {
+  encryptAndUploadSharedAESKey,
+} from "./ipfs";
+import { create } from "@web3-storage/w3up-client";
+import { AnchorWallet } from "@solana/wallet-adapter-react";
 
 /**
  * Fetch all valid FileMetadata accounts uploaded by the current user,
@@ -86,7 +92,7 @@ export async function fetchFileMetadataByCID(
 
 /**
  * Store metadata of an uploaded file on-chain using the file's CID.
- * 
+ *
  * Derives a PDA using the keccak-256 hash of the CID and stores:
  * - The CID of the file stored on IPFS
  * - The CID of the encrypted AES key JSON file
@@ -104,7 +110,8 @@ export async function storeFileMetadata(
   cid: string,
   keyCid: string,
   uploader: PublicKey,
-  programId: PublicKey
+  programId: PublicKey,
+  extension: string,
 ) {
   const cidHash = Buffer.from(keccak_256.arrayBuffer(cid));
 
@@ -114,7 +121,7 @@ export async function storeFileMetadata(
   );
 
   await program.methods
-    .storeFileMetadata(cid, keyCid, true)
+    .storeFileMetadata(cid, keyCid, true, extension)
     .accounts({
       fileMetadata: fileMetadataPDA,
       uploader,
@@ -133,7 +140,7 @@ export async function storeFileMetadata(
 
 /**
  * Register a user's RSA public key on-chain by storing it in a UserRSAKey account.
- * 
+ *
  * This key is used to encrypt AES keys for files uploaded by the user. The key
  * is stored under the user's public key and will be used to later fetch and verify
  * file access permissions securely.
@@ -163,3 +170,149 @@ export async function registerRSAKeyOnChain(
     .rpc();
 }
 
+/**
+ * Fetches the RSA public key registered for a given user's wallet public key.
+ */
+export async function getRSAKeyByPubkey(
+  program: Program<RsaStorage>,
+  userPubkey: PublicKey
+): Promise<string | null> {
+  try {
+    const [rsaPDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from("user_rsa"), userPubkey.toBuffer()],
+      program.programId
+    );
+
+    const rsaKeyAccount = await program.account.userRsaKey.fetch(rsaPDA);
+    return rsaKeyAccount.rsaKey;
+  } catch (err) {
+    console.warn(
+      "Could not fetch RSA key for user:",
+      userPubkey.toBase58(),
+      err
+    );
+    return null;
+  }
+}
+
+/**
+ * Shares access to a file by uploading a new AES key encrypted for another user,
+ * and writing a SharedAccess account on-chain.
+ */
+export async function shareFileWithUser(options: {
+  program: Program<RsaStorage>;
+  sharer: any;
+  fileCid: string;
+  aesKeyRaw: ArrayBuffer;
+  recipientPubkey: string; // base58 string
+  recipientRsaPublicKeyPem: string;
+  extension: string;
+  client: Awaited<ReturnType<typeof create>>;
+}) {
+  const {
+    program,
+    sharer,
+    fileCid,
+    aesKeyRaw,
+    recipientPubkey,
+    recipientRsaPublicKeyPem,
+    extension,
+    client,
+  } = options;
+
+  // Step 1: Encrypt the AES key for the recipient and upload it to IPFS
+  const sharedKeyCid = await encryptAndUploadSharedAESKey(
+    aesKeyRaw,
+    recipientRsaPublicKeyPem,
+    client
+  );
+
+  // Step 2: Call the smart contract to create a SharedAccess entry
+  const hashHex = keccak_256(fileCid); // string (hex)
+  const hashBytes = hexToBytes(hashHex); // Uint8Array
+  const hashedCid = Buffer.from(hashBytes); // ✅ final 32-byte seed
+
+  const [sharedAccessPda, bump] = PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("shared_access"),
+      hashedCid,
+      new PublicKey(recipientPubkey).toBuffer(),
+    ],
+    program.programId
+  );
+  const accounts = {
+    sharer: sharer.publicKey,
+    sharedWith: new PublicKey(recipientPubkey),
+    sharedAccess: sharedAccessPda,
+    systemProgram: SystemProgram.programId,
+  };
+
+  if (!sharer || typeof sharer.signTransaction !== "function") {
+    throw new Error("❌ Invalid sharer: wallet must support signTransaction");
+  }
+
+  await program.methods
+    .shareFileAccess(fileCid, sharedKeyCid, extension)
+    .accounts(accounts)
+    .rpc();
+
+  return sharedAccessPda;
+}
+
+/**
+ * Fetches all shared access entries for the given user.
+ *
+ * @param program - The Anchor program instance
+ * @param userPubKey - The user's wallet public key
+ * @returns List of shared access entries for the user
+ */
+export async function listSharedFiles(
+  program: Program<RsaStorage>,
+  userPubkey: PublicKey
+) {
+  const allEntries = await program.account.sharedAccess.all();
+  const sharedAccessAccounts = allEntries.filter(
+    (entry) => entry.account.sharedWith.toBase58() === userPubkey.toBase58()
+  );
+
+  return sharedAccessAccounts.map((entry) => ({
+    cid: entry.account.cid,
+    sharedKeyCid: entry.account.sharedKeyCid,
+    sharedBy: entry.account.sharedBy,
+    timestamp: entry.account.timestamp,
+    extension: entry.account.extension,
+  }));
+}
+
+/**
+ * Deletes a FileMetadata account from the Solana blockchain for a given CID.
+ *
+ * This operation is only permitted by the original uploader of the file.
+ * The metadata account is closed and its lamports are refunded to the uploader.
+ *
+ * This is useful for cleaning up files that are no longer accessible or needed,
+ * especially during development and testing.
+ *
+ * @param program - The Anchor program instance
+ * @param cid - The content identifier (CID) of the file to be deleted
+ * @param publicKey - The uploader's public key
+ * @returns A Promise that resolves when the transaction is confirmed
+ */
+export async function deleteFileMetadata(
+  program: Program<RsaStorage>,
+  cid: string,
+  publicKey: PublicKey
+) {
+  const [fileMetadataPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("file_metadata"), Buffer.from(keccak_256(cid), "hex")],
+    program.programId
+  );
+
+  await program.methods
+    .deleteFileMetadata(cid) 
+    .accounts({
+      fileMetadata: fileMetadataPda,
+      uploader: publicKey,
+    })
+    .rpc();
+}

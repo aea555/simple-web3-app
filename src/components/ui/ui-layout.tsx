@@ -8,7 +8,7 @@ import toast, { Toaster } from 'react-hot-toast'
 
 import { AccountChecker } from '../account/account-ui' // Assuming this path is correct
 import { ClusterChecker, ClusterUiSelect, ExplorerLink } from '../cluster/cluster-ui' // Assuming this path is correct
-import { WalletButton } from '../solana/solana-provider' // Assuming this path is correct
+import { WalletButton } from '@/providers/solana-provider'
 
 /**
  * UiLayout Component
@@ -29,12 +29,13 @@ export function UiLayout({ children }: { children: ReactNode }) {
     { label: 'Clusters', path: '/clusters' },
     { label: 'Upload', path: '/upload' },
     { label: 'Fetch', path: '/fetch' },
+    { label: "Shared Files", path: "/shared" },
     // Add other relevant links here if your project expands
     // { label: 'Settings', path: '/settings' },
   ];
 
   return (
-    <div className="h-full flex flex-col min-h-screen text-gray-900 dark:text-gray-100 font-inter">
+    <div className="h-full flex flex-col min-h-screen text-gray-900 dark:text-gray-100 font-inter bg-white dark:bg-gray-900">
       {/* Navbar */}
       <div className="navbar bg-white dark:bg-gray-800 shadow-md flex-col md:flex-row space-y-2 md:space-y-0 px-4 py-3 rounded-b-lg">
         <div className="flex-1">
